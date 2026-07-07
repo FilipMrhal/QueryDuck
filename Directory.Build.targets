@@ -1,0 +1,3 @@
+<Project>
+  <!-- Reserved for shared build targets. Analyzer bundling lives in QueryDuck.Core.csproj. -->
+</Project>

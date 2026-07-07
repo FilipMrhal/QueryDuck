@@ -1,0 +1,20 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>QueryDuck.Testing</RootNamespace>
+    <!-- Internal integration-test helpers (Testcontainers fixtures); not shipped as a NuGet package. -->
+    <IsPackable>false</IsPackable>
+    <Description>Testcontainers helpers and bootstrap utilities for QueryDuck integration tests.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\QueryDuck.Core\QueryDuck.Core.csproj" />
+    <PackageReference Include="Testcontainers" />
+    <PackageReference Include="Testcontainers.Oracle" />
+    <PackageReference Include="Testcontainers.PostgreSql" />
+    <PackageReference Include="Testcontainers.MsSql" />
+    <PackageReference Include="Testcontainers.MariaDb" />
+    <PackageReference Include="Verify.Xunit" />
+  </ItemGroup>
+
+</Project>

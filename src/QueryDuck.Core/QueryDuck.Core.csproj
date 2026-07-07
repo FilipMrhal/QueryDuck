@@ -1,0 +1,25 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>QueryDuck.Core</RootNamespace>
+    <Description>EF Core query capture, diagnostics, slow-query analysis, provider adapters (Oracle, PostgreSQL, SQL Server, MySQL), and local debugging server for QueryDuck.</Description>
+    <NoWarn>$(NoWarn);CA1031;CA1819;CA1859;CA2234;CA1508;CA1822;CA1849;CA2100;CA1305;CA5394</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
+  </ItemGroup>
+
+  <ItemGroup Label="BundledAnalyzers">
+    <ProjectReference Include="..\QueryDuck.Analyzers\QueryDuck.Analyzers.csproj"
+                      ReferenceOutputAssembly="false"
+                      PrivateAssets="all" />
+    <None Include="..\QueryDuck.Analyzers\bin\$(Configuration)\netstandard2.0\QueryDuck.Analyzers.dll"
+          Pack="true"
+          PackagePath="analyzers/dotnet/cs"
+          Visible="false" />
+  </ItemGroup>
+
+</Project>

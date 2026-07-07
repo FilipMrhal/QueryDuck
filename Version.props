@@ -1,0 +1,8 @@
+<Project>
+  <PropertyGroup Label="Version">
+    <!-- Keep QueryDuckAssembly.Version in src/QueryDuck.Core/QueryDuckAssembly.cs in sync. -->
+    <VersionPrefix>1.5.0</VersionPrefix>
+    <!-- CI may override $(Version) from git tags or append a prerelease suffix. -->
+    <Version Condition="'$(Version)' == ''">$(VersionPrefix)</Version>
+  </PropertyGroup>
+</Project>

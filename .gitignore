@@ -1,0 +1,24 @@
+## Build
+bin/
+obj/
+artifacts/
+
+## IDE
+.idea/
+.vs/
+*.user
+*.suo
+
+## Rider plugin (Gradle)
+rider-plugin/.gradle/
+rider-plugin/build/
+rider-plugin/.intellijPlatform/
+
+## Test
+TestResults/
+coverage/
+*.trx
+
+## OS
+.DS_Store
+Thumbs.db
