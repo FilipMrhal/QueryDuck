@@ -1,0 +1,12 @@
+<idea-plugin>
+  <id>com.queryduck.rider</id>
+  <name>QueryDuck</name>
+  <vendor>QueryDuck</vendor>
+  <depends>com.intellij.modules.rider</depends>
+  <extensions defaultExtensionNs="com.intellij">
+    <toolWindow id="QueryDuck"
+                anchor="bottom"
+                factoryClass="com.queryduck.rider.QueryDuckToolWindowFactory"
+                icon="/icons/queryduck.svg"/>
+  </extensions>
+</idea-plugin>
