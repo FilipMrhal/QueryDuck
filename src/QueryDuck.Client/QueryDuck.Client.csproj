@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <RootNamespace>QueryDuck.Client</RootNamespace>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <!-- Consumed by the in-repo VS extension via ProjectReference; not shipped as a NuGet package. -->
+    <IsPackable>false</IsPackable>
+    <Description>HTTP client and DTOs for the QueryDuck local event server (Rider + Visual Studio).</Description>
+    <NoWarn>$(NoWarn);CA2234;CA1032;CA1054;CA1056;CA1062;CA2227;CA1002;CA1847;CA1307</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Text.Json" />
+  </ItemGroup>
+
+</Project>

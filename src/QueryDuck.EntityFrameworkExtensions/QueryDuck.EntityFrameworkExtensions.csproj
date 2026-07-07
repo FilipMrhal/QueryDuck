@@ -1,0 +1,20 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\QueryDuck.Core\QueryDuck.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Z.EntityFramework.Extensions.EFCore" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <RootNamespace>QueryDuck.EntityFrameworkExtensions</RootNamespace>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Description>Bridge package for capturing Z.EntityFramework.Extensions bulk/batch SQL in QueryDuck.</Description>
+    <NoWarn>$(NoWarn);CA1031</NoWarn>
+  </PropertyGroup>
+
+</Project>
