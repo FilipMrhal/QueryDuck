@@ -131,8 +131,10 @@ public sealed class QueryCaptureEventDto
             return "—";
         }
 
-        var dot = Duration.IndexOf('.');
-        return dot >= 0 ? Duration.Substring(0, dot) : Duration;
+        // netstandard2.0 lacks [NotNullWhen] on IsNullOrWhiteSpace, so narrow manually.
+        var duration = Duration!;
+        var dot = duration.IndexOf('.');
+        return dot >= 0 ? duration.Substring(0, dot) : duration;
     }
 
     public string MetaSourceLabel()

@@ -183,7 +183,9 @@ class QueryDuckPanel(private val project: Project) : JPanel(BorderLayout()) {
         }
 
         providerFilter.addActionListener { applyFilters(preserveSelection = true) }
-        autoRefresh.addActionListener { refreshTimer.isRunning = autoRefresh.isSelected }
+        autoRefresh.addActionListener {
+            if (autoRefresh.isSelected) refreshTimer.start() else refreshTimer.stop()
+        }
 
         refreshTimer.start()
         refresh(silent = false)
@@ -344,9 +346,9 @@ class QueryDuckPanel(private val project: Project) : JPanel(BorderLayout()) {
 
         warningsList.model = DefaultListModel<QueryDiagnosticDto>().apply {
             if (event.diagnostics.isEmpty()) {
-                add(QueryDiagnosticDto("INFO", "Info", "No diagnostics for this query."))
+                addElement(QueryDiagnosticDto("INFO", "Info", "No diagnostics for this query."))
             } else {
-                event.diagnostics.forEach { add(it) }
+                event.diagnostics.forEach { addElement(it) }
             }
         }
 
@@ -370,7 +372,7 @@ class QueryDuckPanel(private val project: Project) : JPanel(BorderLayout()) {
         }
 
         recommendationsList.model = DefaultListModel<SlowQueryRecommendationDto>().apply {
-            analysis.recommendations.forEach { add(it) }
+            analysis.recommendations.forEach { addElement(it) }
         }
 
         pgStatPanel.setText(formatPgStatInsight(analysis.pgStatStatements))

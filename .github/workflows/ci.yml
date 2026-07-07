@@ -120,7 +120,7 @@ jobs:
 
       - name: Build Rider plugin distribution
         working-directory: rider-plugin
-        run: gradle buildPlugin --no-daemon
+        run: ./gradlew buildPlugin --no-daemon
 
       - name: Upload Rider plugin
         uses: actions/upload-artifact@v4
@@ -138,8 +138,11 @@ jobs:
         with:
           global-json-file: global.json
 
+      - name: Restore VS extension
+        run: dotnet restore vs-extension/QueryDuck.VisualStudio/QueryDuck.VisualStudio.csproj
+
       - name: Build VSIX
-        run: dotnet build vs-extension/QueryDuck.VisualStudio/QueryDuck.VisualStudio.csproj --configuration ${{ env.CONFIGURATION }}
+        run: dotnet build vs-extension/QueryDuck.VisualStudio/QueryDuck.VisualStudio.csproj --configuration ${{ env.CONFIGURATION }} --no-restore
 
       - name: Upload VSIX
         uses: actions/upload-artifact@v4

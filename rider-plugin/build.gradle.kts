@@ -10,13 +10,14 @@ version = "1.4.0"
 repositories {
     mavenCentral()
     intellijPlatform {
-        rider("2025.3")
+        defaultRepositories()
     }
 }
 
 dependencies {
     intellijPlatform {
-        rider("2025.3")
+        rider("2025.3", useInstaller = false)
+        jetbrainsRuntime()
     }
     implementation("com.google.code.gson:gson:2.11.0")
 }
@@ -35,4 +36,10 @@ intellijPlatform {
 
 kotlin {
     jvmToolchain(21)
+}
+
+tasks {
+    buildSearchableOptions {
+        enabled = false
+    }
 }

@@ -19,7 +19,6 @@ class QueryDuckCodeEditor(
 ) : JPanel(BorderLayout()) {
     private val fileType: LanguageFileType = resolveFileType(languageId)
     private val editorField = EditorTextField("", project, fileType).apply {
-        isOneLineMode = false
         addSettingsProvider { editor ->
             (editor as EditorEx).apply {
                 isViewer = true
