@@ -49,4 +49,10 @@
     <Reference Include="WindowsBase" />
   </ItemGroup>
 
+  <!-- The VSSDK NuGet package only defines $(VsSDKInstall); the packaging targets
+       (CreateVsixContainer etc.) must be imported explicitly. They require
+       full-framework MSBuild, so skip them under the dotnet CLI. -->
+  <Import Project="$(VsSDKInstall)\Microsoft.VsSDK.targets"
+          Condition="'$(MSBuildRuntimeType)' != 'Core' and Exists('$(VsSDKInstall)\Microsoft.VsSDK.targets')" />
+
 </Project>
