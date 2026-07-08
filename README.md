@@ -131,12 +131,31 @@ flowchart LR
 
 ## Configuration
 
-### `UseQueryDuckDebugging()` vs `UseQueryDuckCapture()`
+### `UseQueryDuckDebugging()` vs `UseQueryDuckCapture()` vs `UseQueryDuckProduction()`
 
-| Method | Event server | Auto expression trees | Typical use |
-|--------|--------------|----------------------|-------------|
-| `UseQueryDuckDebugging()` | On | On | Local development with Rider/VS |
-| `UseQueryDuckCapture(o => …)` | Configurable | Configurable | Production Serilog export, custom setup |
+| Method | Event server | Serilog exporter | Typical use |
+|--------|--------------|------------------|-------------|
+| `UseQueryDuckDebugging()` | On | Off | Local development with Rider/VS |
+| `UseQueryDuckProduction(logger)` | **Off** | **On** | Production: Serilog only, no HTTP server |
+| `UseQueryDuckCapture(o => …)` | Configurable | Configurable | Custom setup |
+
+`UseQueryDuckProduction` (in the `QueryDuck.Serilog` package) sets `StartLocalEventServer = false`
+and registers the Serilog exporter. Both are just defaults — the `configure` callback runs last, so
+any option (including re-enabling the server) can be overridden, e.g. driven by `appsettings.json`:
+
+```csharp
+using QueryDuck.Serilog;
+
+options.UseQueryDuckProduction(
+    Log.Logger,
+    configureSerilog: serilog => serilog.LogSlowQueries = true,
+    configure: o =>
+    {
+        // read from your configuration system
+        o.StartLocalEventServer = config.GetValue<bool>("QueryDuck:StartLocalEventServer");
+        o.SlowQueryThresholdMs = config.GetValue<int>("QueryDuck:SlowQueryThresholdMs");
+    });
+```
 
 ### Common options
 
@@ -358,12 +377,25 @@ Export SQL **failures** and **slow queries** to Serilog with structured `QueryDu
 dotnet add package QueryDuck.Serilog
 ```
 
+The easiest production setup is the `UseQueryDuckProduction` preset — Serilog exporter on, HTTP event server off:
+
 ```csharp
 using QueryDuck.Serilog;
 using Serilog;
 
 Log.Logger = new LoggerConfiguration().WriteTo.Console().CreateLogger();
 
+options.UseQueryDuckProduction(Log.Logger, serilog =>
+{
+    serilog.LogSlowQueries = true;
+    serilog.LogSqlFailures = true;
+    serilog.LogSuccessfulQueries = false;
+});
+```
+
+For full control, use `UseQueryDuckCapture` and wire the exporter yourself:
+
+```csharp
 options.UseQueryDuckCapture(o =>
 {
     o.StartLocalEventServer = false; // typical in production
