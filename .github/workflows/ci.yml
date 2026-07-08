@@ -140,37 +140,9 @@ jobs:
           name: queryduck-rider-plugin
           path: rider-plugin/build/distributions/*.zip
 
-  vsix:
-    needs: build-test
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-dotnet@v4
-        with:
-          global-json-file: global.json
-
-      # VSIX packaging (CreateVsixContainer from VSSDK BuildTools) only runs under
-      # full-framework MSBuild, not the dotnet CLI.
-      - name: Add MSBuild to PATH
-        uses: microsoft/setup-msbuild@v2
-
-      - name: Restore VS extension
-        run: dotnet restore vs-extension/QueryDuck.VisualStudio/QueryDuck.VisualStudio.csproj
-
-      - name: Build VSIX
-        run: msbuild vs-extension/QueryDuck.VisualStudio/QueryDuck.VisualStudio.csproj /p:Configuration=${{ env.CONFIGURATION }} /p:DeployExtension=false /v:minimal
-
-      - name: Upload VSIX
-        uses: actions/upload-artifact@v4
-        with:
-          name: queryduck-vsix
-          path: vs-extension/QueryDuck.VisualStudio/bin/${{ env.CONFIGURATION }}/**/*.vsix
-          if-no-files-found: error
-
   release:
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    needs: [pack-nuget, rider-plugin, vsix]
+    needs: [pack-nuget, rider-plugin]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -187,18 +159,11 @@ jobs:
           name: queryduck-rider-plugin
           path: release/rider-plugin
 
-      - name: Download VSIX
-        uses: actions/download-artifact@v4
-        with:
-          name: queryduck-vsix
-          path: release/vsix
-
       - name: Create GitHub release assets bundle
         run: |
           mkdir -p release/bundle
           cp release/nuget/* release/bundle/
           cp release/rider-plugin/* release/bundle/
-          cp release/vsix/* release/bundle/
           ls -la release/bundle
 
       - name: Publish GitHub release

@@ -1,6 +1,6 @@
 # QueryDuck
 
-**QueryDuck** is an EF Core 10 debugging toolkit for Oracle, PostgreSQL, SQL Server, and MySQL/MariaDB. It captures every SQL command your app executes, analyzes LINQ expression trees, flags provider-specific pitfalls, detects N+1 and slow queries, and recommends concrete fixes — all visible in **JetBrains Rider** or **Visual Studio 2022** via a local HTTP event server.
+**QueryDuck** is an EF Core 10 debugging toolkit for Oracle, PostgreSQL, SQL Server, and MySQL/MariaDB. It captures every SQL command your app executes, analyzes LINQ expression trees, flags provider-specific pitfalls, detects N+1 and slow queries, and recommends concrete fixes — all visible in **JetBrains Rider** via a local HTTP event server.
 
 ![QueryDuck Rider plugin — SQL tab](assets/mockups/queryduck-rider-main.png)
 
@@ -14,7 +14,6 @@
 - [Configuration](#configuration)
 - [IDE integration](#ide-integration)
   - [Rider plugin](#rider-plugin)
-  - [Visual Studio extension](#visual-studio-extension)
 - [Diagnostic rules (QD001–QD009)](#diagnostic-rules-qd001qd009)
 - [Session insights](#session-insights)
 - [Slow query improvement engine](#slow-query-improvement-engine)
@@ -94,7 +93,6 @@ dotnet add package QueryDuck.EntityFrameworkExtensions
 | IDE | Install |
 |-----|---------|
 | **Rider** | Build from `rider-plugin/` (`gradle buildPlugin`) or download the `.zip` from a [GitHub Release](https://github.com/FilipMrhal/QueryDuck/releases) |
-| **Visual Studio 2022** | Build the VSIX on Windows — see [vs-extension/README.md](vs-extension/README.md) |
 
 ---
 
@@ -111,19 +109,17 @@ flowchart LR
   end
   subgraph ide [IDE]
     Rider[Rider plugin]
-    VS[VS extension]
   end
   LINQ --> Interceptor --> Pipeline --> Buffer
   Pipeline --> Server
   Server --> Rider
-  Server --> VS
 ```
 
 1. **`UseQueryDuckCapture()`** registers EF Core interceptors on your `DbContext`.
 2. Every executed command is recorded with SQL, parameters, duration, expression tree, and diagnostics.
 3. Slow queries trigger optional EXPLAIN capture and an improvement analysis engine.
 4. Events are stored in a ring buffer and exposed via a **local HTTP server** (default `http://127.0.0.1:17654`).
-5. The **Rider** or **VS** plugin polls that server and renders a rich tool window.
+5. The **Rider** plugin polls that server and renders a rich tool window.
 
 `UseQueryDuckDebugging()` is shorthand that enables auto-capture, the event server, and expression-tree attachment on every query.
 
@@ -135,7 +131,7 @@ flowchart LR
 
 | Method | Event server | Serilog exporter | Typical use |
 |--------|--------------|------------------|-------------|
-| `UseQueryDuckDebugging()` | On | Off | Local development with Rider/VS |
+| `UseQueryDuckDebugging()` | On | Off | Local development with Rider |
 | `UseQueryDuckProduction(logger)` | **Off** | **On** | Production: Serilog only, no HTTP server |
 | `UseQueryDuckCapture(o => …)` | Configurable | Configurable | Custom setup |
 
@@ -250,21 +246,6 @@ gradle buildPlugin
 ```
 
 Install via Rider → Settings → Plugins → ⚙ → Install Plugin from Disk.
-
-### Visual Studio extension
-
-Same workflow and feature parity as Rider.
-
-**Open:** View → Other Windows → **QueryDuck**
-
-**Build & install (Windows + VS 2022):**
-
-```powershell
-dotnet build vs-extension/QueryDuck.VisualStudio/QueryDuck.VisualStudio.csproj -c Release
-# Install: vs-extension/QueryDuck.VisualStudio/bin/Release/QueryDuck.VisualStudio.vsix
-```
-
-See [vs-extension/README.md](vs-extension/README.md) for F5 experimental-instance debugging.
 
 ---
 
@@ -489,7 +470,6 @@ QueryDuckCapture.RecordFromQuery(query, context);
 
 - .NET SDK **10.0** (see [global.json](global.json))
 - JDK **21** (Rider plugin build)
-- Visual Studio 2022 + SDK (VSIX build, Windows only)
 
 ### Commands
 
@@ -505,7 +485,6 @@ dotnet test QueryDuck.slnx --settings coverlet.runsettings
 |----------|----------|
 | `nuget-packages` | `QueryDuck.Core`, `QueryDuck.Serilog`, `QueryDuck.EntityFrameworkExtensions` + symbol packages |
 | `queryduck-rider-plugin` | Rider plugin `.zip` |
-| `queryduck-vsix` | Visual Studio 2022 extension |
 | `coverage` | Cobertura coverage + test results |
 
 Tag a release as `v1.4.0` to create a GitHub Release with all artifacts. Set the `NUGET_API_KEY` secret to publish to NuGet.org.
