@@ -217,7 +217,7 @@ internal sealed class PlanStepGraphControl : Canvas
             text,
             CultureInfo.InvariantCulture,
             FlowDirection.LeftToRight,
-            new Typeface(new FontFamily("Segoe UI"), FontStyles.Normal, weight, FontWeights.Regular),
+            new Typeface(new FontFamily("Segoe UI"), FontStyles.Normal, weight, FontStretches.Normal),
             size,
             new SolidColorBrush(color ?? Color.FromRgb(0xDD, 0xE4, 0xF0)),
             dpi.PixelsPerDip);

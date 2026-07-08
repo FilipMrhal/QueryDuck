@@ -166,8 +166,9 @@ public partial class QueryDuckToolWindowControl : UserControl
 
     private void ShowSelectedEvent(QueryCaptureEventDto evt)
     {
+        // Substring instead of a range indexer: net472 has no System.Range.
         MetaLabel.Text =
-            $" {evt.Provider} · {evt.MetaSourceLabel()} · {evt.FormattedDuration()} · {evt.EventId[..Math.Min(8, evt.EventId.Length)]} · schema v{evt.SchemaVersion}";
+            $" {evt.Provider} · {evt.MetaSourceLabel()} · {evt.FormattedDuration()} · {evt.EventId.Substring(0, Math.Min(8, evt.EventId.Length))} · schema v{evt.SchemaVersion}";
 
         SqlTextBox.Text = FormatSql(evt.Sql);
         CSharpTextBox.Text = evt.ExpressionCSharp ??
@@ -320,14 +321,15 @@ public partial class QueryDuckToolWindowControl : UserControl
         PlanGraphControl.SetPlanDiff(null);
     }
 
+    // net472: string.Replace(string, string) is already ordinal; the StringComparison overload doesn't exist there.
     private static string FormatSql(string sql) =>
-        sql.Replace(" SELECT ", "\nSELECT ", StringComparison.Ordinal)
-            .Replace(" FROM ", "\nFROM ", StringComparison.Ordinal)
-            .Replace(" WHERE ", "\nWHERE ", StringComparison.Ordinal)
-            .Replace(" INNER JOIN ", "\nINNER JOIN ", StringComparison.Ordinal)
-            .Replace(" LEFT JOIN ", "\nLEFT JOIN ", StringComparison.Ordinal)
-            .Replace(" ORDER BY ", "\nORDER BY ", StringComparison.Ordinal)
-            .Replace(" GROUP BY ", "\nGROUP BY ", StringComparison.Ordinal)
+        sql.Replace(" SELECT ", "\nSELECT ")
+            .Replace(" FROM ", "\nFROM ")
+            .Replace(" WHERE ", "\nWHERE ")
+            .Replace(" INNER JOIN ", "\nINNER JOIN ")
+            .Replace(" LEFT JOIN ", "\nLEFT JOIN ")
+            .Replace(" ORDER BY ", "\nORDER BY ")
+            .Replace(" GROUP BY ", "\nGROUP BY ")
             .Trim();
 
     private sealed class ParameterRow

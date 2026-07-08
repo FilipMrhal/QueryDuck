@@ -5,6 +5,8 @@
     <RootNamespace>QueryDuck.VisualStudio</RootNamespace>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
+    <!-- The root Directory.Build.props is not imported here (vs-extension has its own), so opt in explicitly. -->
+    <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <GeneratePkgDefFile>true</GeneratePkgDefFile>
     <UseCodebase>true</UseCodebase>
