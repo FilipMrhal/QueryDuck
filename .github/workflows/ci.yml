@@ -150,17 +150,23 @@ jobs:
         with:
           global-json-file: global.json
 
+      # VSIX packaging (CreateVsixContainer from VSSDK BuildTools) only runs under
+      # full-framework MSBuild, not the dotnet CLI.
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v2
+
       - name: Restore VS extension
         run: dotnet restore vs-extension/QueryDuck.VisualStudio/QueryDuck.VisualStudio.csproj
 
       - name: Build VSIX
-        run: dotnet build vs-extension/QueryDuck.VisualStudio/QueryDuck.VisualStudio.csproj --configuration ${{ env.CONFIGURATION }} --no-restore
+        run: msbuild vs-extension/QueryDuck.VisualStudio/QueryDuck.VisualStudio.csproj /p:Configuration=${{ env.CONFIGURATION }} /p:DeployExtension=false /v:minimal
 
       - name: Upload VSIX
         uses: actions/upload-artifact@v4
         with:
           name: queryduck-vsix
-          path: vs-extension/QueryDuck.VisualStudio/bin/${{ env.CONFIGURATION }}/*.vsix
+          path: vs-extension/QueryDuck.VisualStudio/bin/${{ env.CONFIGURATION }}/**/*.vsix
+          if-no-files-found: error
 
   release:
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
