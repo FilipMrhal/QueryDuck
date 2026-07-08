@@ -42,5 +42,7 @@
     <PackageVersion Include="Testcontainers.MsSql" Version="4.4.0" />
     <PackageVersion Include="Testcontainers.MariaDb" Version="4.4.0" />
     <PackageVersion Include="Verify.Xunit" Version="28.6.0" />
+    <!-- Overrides the vulnerable 2.1.11 native SQLite pulled in via EF Core Sqlite (CVE-2025-6965, GHSA-2m69-gcr7-jv3q). -->
+    <PackageVersion Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.3" />
   </ItemGroup>
 </Project>

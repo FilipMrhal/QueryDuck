@@ -49,6 +49,11 @@ public sealed class QueryDuckEventServer : IAsyncDisposable
         WriteIndented = true,
     };
 
+    /// <summary>
+    /// Upper bound for POSTed event payloads; anything larger is rejected with 413.
+    /// </summary>
+    private const long MaxRequestBodyBytes = 5 * 1024 * 1024;
+
     private readonly HttpListener _listener = new();
     private readonly CancellationTokenSource _cts = new();
     private Task? _loop;
@@ -60,9 +65,32 @@ public sealed class QueryDuckEventServer : IAsyncDisposable
             return;
         }
 
+        EnsureLoopbackPrefix(prefix);
         _listener.Prefixes.Add(prefix);
         _listener.Start();
         _loop = Task.Run(() => ListenAsync(_cts.Token));
+    }
+
+    /// <summary>
+    /// The server exposes captured SQL, parameters, and execution plans without authentication,
+    /// so it must never listen on a network-reachable interface.
+    /// </summary>
+    private static void EnsureLoopbackPrefix(string prefix)
+    {
+        if (!Uri.TryCreate(prefix, UriKind.Absolute, out var uri))
+        {
+            throw new ArgumentException($"Invalid event server prefix '{prefix}'.", nameof(prefix));
+        }
+
+        var isLoopback = uri.IsLoopback
+            || (IPAddress.TryParse(uri.Host.Trim('[', ']'), out var address) && IPAddress.IsLoopback(address));
+
+        if (!isLoopback)
+        {
+            throw new InvalidOperationException(
+                $"QueryDuck event server refuses to bind to non-loopback prefix '{prefix}'. " +
+                "The server is unauthenticated and exposes captured SQL; only 127.0.0.1, [::1], or localhost are allowed.");
+        }
     }
 
     public async ValueTask DisposeAsync()
@@ -160,11 +188,32 @@ public sealed class QueryDuckEventServer : IAsyncDisposable
             if (path.Equals("/queryduck/events", StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(context.Request.HttpMethod, "POST", StringComparison.OrdinalIgnoreCase))
             {
-                using var reader = new StreamReader(context.Request.InputStream, context.Request.ContentEncoding);
-                var body = await reader.ReadToEndAsync().ConfigureAwait(false);
+                if (context.Request.ContentLength64 > MaxRequestBodyBytes)
+                {
+                    context.Response.StatusCode = 413;
+                    await WriteJsonAsync(context, new { error = "payload too large" }).ConfigureAwait(false);
+                    return;
+                }
+
+                var body = await ReadBodyAsync(context.Request).ConfigureAwait(false);
+                if (body is null)
+                {
+                    context.Response.StatusCode = 413;
+                    await WriteJsonAsync(context, new { error = "payload too large" }).ConfigureAwait(false);
+                    return;
+                }
+
                 if (!string.IsNullOrWhiteSpace(body))
                 {
-                    QueryDuckCapture.Record(JsonSerializer.Deserialize<QueryCaptureEvent>(body, SerializerOptions)!);
+                    var captureEvent = JsonSerializer.Deserialize<QueryCaptureEvent>(body, SerializerOptions);
+                    if (captureEvent is null)
+                    {
+                        context.Response.StatusCode = 400;
+                        await WriteJsonAsync(context, new { error = "invalid event payload" }).ConfigureAwait(false);
+                        return;
+                    }
+
+                    QueryDuckCapture.Record(captureEvent);
                 }
 
                 await WriteJsonAsync(context, new { ok = true }).ConfigureAwait(false);
@@ -174,18 +223,48 @@ public sealed class QueryDuckEventServer : IAsyncDisposable
             context.Response.StatusCode = 404;
             await WriteJsonAsync(context, new { error = "not found", path }).ConfigureAwait(false);
         }
-        catch (Exception ex)
+        catch (JsonException)
         {
-            context.Response.StatusCode = 500;
-            await WriteJsonAsync(context, new { error = ex.Message }).ConfigureAwait(false);
+            context.Response.StatusCode = 400;
+            await WriteJsonAsync(context, new { error = "invalid event payload" }).ConfigureAwait(false);
         }
+        catch (Exception)
+        {
+            // Never echo exception details: messages can contain SQL fragments or connection info.
+            context.Response.StatusCode = 500;
+            await WriteJsonAsync(context, new { error = "internal error" }).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Reads the request body with a hard size cap (Content-Length can be absent or lie with chunked encoding).
+    /// Returns null when the cap is exceeded.
+    /// </summary>
+    private static async Task<string?> ReadBodyAsync(HttpListenerRequest request)
+    {
+        using var buffer = new MemoryStream();
+        var chunk = new byte[81920];
+        int read;
+        while ((read = await request.InputStream.ReadAsync(chunk).ConfigureAwait(false)) > 0)
+        {
+            buffer.Write(chunk, 0, read);
+            if (buffer.Length > MaxRequestBodyBytes)
+            {
+                return null;
+            }
+        }
+
+        return (request.ContentEncoding ?? Encoding.UTF8).GetString(buffer.ToArray());
     }
 
     private static void AddCors(HttpListenerContext context)
     {
-        context.Response.Headers["Access-Control-Allow-Origin"] = "*";
+        // Deliberately no Access-Control-Allow-Origin: the IDE plugins use plain HTTP clients,
+        // and a wildcard would let any web page a developer visits read captured SQL from localhost.
         context.Response.Headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS";
         context.Response.Headers["Access-Control-Allow-Headers"] = "Content-Type";
+        context.Response.Headers["X-Content-Type-Options"] = "nosniff";
+        context.Response.Headers["Cache-Control"] = "no-store";
     }
 
     private static async Task WriteJsonAsync(HttpListenerContext context, object payload)

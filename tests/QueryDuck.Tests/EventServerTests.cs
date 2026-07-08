@@ -112,6 +112,63 @@ public sealed class EventServerTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Start_RefusesNonLoopbackPrefix()
+    {
+        await using var server = new QueryDuckEventServer();
+        Assert.Throws<InvalidOperationException>(() => server.Start("http://0.0.0.0:17656/"));
+        // Wildcard prefixes are not parseable URIs and are rejected as invalid arguments.
+        Assert.Throws<ArgumentException>(() => server.Start("http://+:17656/"));
+    }
+
+    [Fact]
+    public async Task PostEvents_RejectsOversizedPayload()
+    {
+        StartServer();
+        QueryDuckCapture.Clear();
+
+        using var client = new HttpClient();
+        var oversized = new byte[6 * 1024 * 1024];
+        using var content = new ByteArrayContent(oversized);
+        content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
+
+        try
+        {
+            var response = await client.PostAsync(new Uri(Prefix, "queryduck/events"), content);
+            Assert.Equal(HttpStatusCode.RequestEntityTooLarge, response.StatusCode);
+        }
+        catch (HttpRequestException)
+        {
+            // The server may close the connection before the client finishes uploading;
+            // the broken pipe is itself proof of rejection.
+        }
+
+        Assert.Empty(QueryDuckCapture.LastCommands);
+    }
+
+    [Fact]
+    public async Task PostEvents_RejectsMalformedJson()
+    {
+        StartServer();
+
+        using var client = new HttpClient();
+        using var content = new StringContent("{not json", Encoding.UTF8, "application/json");
+        var response = await client.PostAsync(new Uri(Prefix, "queryduck/events"), content);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Responses_DoNotAllowCrossOriginReads()
+    {
+        StartServer();
+
+        using var client = new HttpClient();
+        using var response = await client.GetAsync(new Uri(Prefix, "queryduck/health"));
+
+        Assert.False(response.Headers.Contains("Access-Control-Allow-Origin"));
+    }
+
+    [Fact]
     public async Task UnknownRoute_ReturnsNotFound()
     {
         StartServer();
