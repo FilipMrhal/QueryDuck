@@ -1,8 +1,8 @@
 using System.Data.Common;
 using Microsoft.EntityFrameworkCore;
 using QueryDuck.Core.Adapters;
-using QueryDuck.Core.Performance;
 using QueryDuck.Core.Learning;
+using QueryDuck.Core.Performance;
 using QueryDuck.Core.Providers;
 
 namespace QueryDuck.Core.Capture;

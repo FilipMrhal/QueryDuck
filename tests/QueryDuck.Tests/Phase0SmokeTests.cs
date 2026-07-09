@@ -17,7 +17,7 @@ public sealed class Phase0SmokeTests
     [Fact]
     public void CoreAssembly_HasVersion()
     {
-        Assert.Equal("1.4.0", QueryDuckAssembly.Version);
+        Assert.Equal("1.5.0", QueryDuckAssembly.Version);
     }
 
     [Fact]

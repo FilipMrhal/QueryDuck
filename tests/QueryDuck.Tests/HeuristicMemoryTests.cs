@@ -1,5 +1,5 @@
-using QueryDuck.Core.Learning;
 using QueryDuck.Core.Capture;
+using QueryDuck.Core.Learning;
 using QueryDuck.Core.Performance;
 
 namespace QueryDuck.Tests;
