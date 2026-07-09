@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using QueryDuck.Core.Adapters;
 using QueryDuck.Core.Capture;
+using QueryDuck.Core.Learning;
 
 namespace QueryDuck.Core;
 
@@ -16,6 +17,7 @@ public static class QueryDuckOptionsBuilderExtensions
         ArgumentNullException.ThrowIfNull(optionsBuilder);
         var options = new QueryCaptureOptions();
         configure?.Invoke(options);
+        QueryHeuristicMemory.Configure(options);
         EnsureEventServer(options);
 
         var interceptors = new List<IInterceptor>
@@ -27,6 +29,8 @@ public static class QueryDuckOptionsBuilderExtensions
         {
             interceptors.Add(new QueryDuckAutoCaptureInterceptor());
         }
+
+        interceptors.Add(new QueryDuckSaveChangesInterceptor());
 
         optionsBuilder.AddInterceptors(interceptors.ToArray());
         return optionsBuilder;

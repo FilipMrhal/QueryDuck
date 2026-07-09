@@ -76,6 +76,61 @@ public sealed class MySqlDatabaseAdapter : IDatabaseAdapter
         return findings;
     }
 
+    public async Task<QueryHistoricalStatsInsight?> TryMatchHistoricalStatsAsync(
+        DbConnection connection,
+        string sql,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+        ArgumentException.ThrowIfNullOrWhiteSpace(sql);
+
+        try
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                SELECT DIGEST_TEXT,
+                       COUNT_STAR,
+                       SUM_TIMER_WAIT / NULLIF(COUNT_STAR, 0) / 1000000000 AS mean_ms,
+                       SUM_TIMER_WAIT / 1000000000 AS total_ms,
+                       SUM_ROWS_SENT,
+                       SUM_NO_INDEX_USED
+                FROM performance_schema.events_statements_summary_by_digest
+                ORDER BY mean_ms DESC
+                LIMIT 200
+                """;
+
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                var queryText = reader.GetString(0);
+                if (!QueryHistoricalStatsSqlMatcher.IsLikelyMatch(sql, queryText))
+                {
+                    continue;
+                }
+
+                var calls = Convert.ToInt64(reader.GetValue(1));
+                var meanMs = reader.IsDBNull(2) ? 0 : Convert.ToDouble(reader.GetValue(2));
+                var totalMs = reader.IsDBNull(3) ? 0 : Convert.ToDouble(reader.GetValue(3));
+                var rows = reader.IsDBNull(4) ? 0 : Convert.ToInt64(reader.GetValue(4));
+
+                return new QueryHistoricalStatsInsight(
+                    calls,
+                    meanMs,
+                    totalMs,
+                    rows,
+                    null,
+                    queryText,
+                    "events_statements_summary_by_digest");
+            }
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+
+        return null;
+    }
+
     private static async Task<List<SchemaColumnInfo>> ReadColumnsAsync(DbConnection connection, CancellationToken cancellationToken)
     {
         var columns = new List<SchemaColumnInfo>();

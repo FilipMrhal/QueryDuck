@@ -6,10 +6,17 @@
   <ItemGroup Label="Client">
     <PackageVersion Include="System.Text.Json" Version="8.0.5" />
   </ItemGroup>
+  <ItemGroup Label="OpenTelemetry">
+    <PackageVersion Include="OpenTelemetry.Api" Version="1.15.3" />
+  </ItemGroup>
+
   <ItemGroup Label="Serilog">
     <PackageVersion Include="Serilog" Version="4.2.0" />
   </ItemGroup>
 
+  <ItemGroup Label="Core">
+    <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.0" />
+  </ItemGroup>
   <ItemGroup Label="EF Core">
     <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.0" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.0" />

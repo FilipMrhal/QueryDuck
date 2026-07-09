@@ -9,7 +9,7 @@ internal abstract class QueryRuleBase : IQueryRule
     public abstract string Id { get; }
 
     public virtual IReadOnlyCollection<DatabaseProvider> ApplicableProviders { get; } =
-        [DatabaseProvider.Unknown, DatabaseProvider.Oracle, DatabaseProvider.PostgreSql, DatabaseProvider.SqlServer, DatabaseProvider.MySql];
+        [DatabaseProvider.Unknown, DatabaseProvider.Oracle, DatabaseProvider.PostgreSql, DatabaseProvider.SqlServer, DatabaseProvider.MySql, DatabaseProvider.Sqlite];
 
     public abstract IEnumerable<QueryDiagnostic> Analyze(QueryRuleContext context);
 

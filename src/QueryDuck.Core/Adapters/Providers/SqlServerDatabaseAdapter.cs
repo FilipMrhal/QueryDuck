@@ -70,6 +70,70 @@ public sealed class SqlServerDatabaseAdapter : IDatabaseAdapter
         return findings;
     }
 
+    public async Task<QueryHistoricalStatsInsight?> TryMatchHistoricalStatsAsync(
+        DbConnection connection,
+        string sql,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+        ArgumentException.ThrowIfNullOrWhiteSpace(sql);
+
+        try
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                SELECT TOP (200)
+                       SUBSTRING(st.text, (qs.statement_start_offset / 2) + 1,
+                           ((CASE qs.statement_end_offset WHEN -1 THEN DATALENGTH(st.text)
+                            ELSE qs.statement_end_offset END - qs.statement_start_offset) / 2) + 1) AS query_text,
+                       qs.execution_count,
+                       qs.total_elapsed_time / 1000.0 / NULLIF(qs.execution_count, 0) AS mean_ms,
+                       qs.total_elapsed_time / 1000.0 AS total_ms,
+                       qs.total_rows,
+                       qs.total_logical_reads,
+                       qs.total_physical_reads
+                FROM sys.dm_exec_query_stats qs
+                CROSS APPLY sys.dm_exec_sql_text(qs.sql_handle) st
+                ORDER BY mean_ms DESC
+                """;
+
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                var queryText = reader.IsDBNull(0) ? string.Empty : reader.GetString(0);
+                if (!QueryHistoricalStatsSqlMatcher.IsLikelyMatch(sql, queryText))
+                {
+                    continue;
+                }
+
+                var calls = reader.GetInt64(1);
+                var meanMs = reader.IsDBNull(2) ? 0 : reader.GetDouble(2);
+                var totalMs = reader.IsDBNull(3) ? 0 : reader.GetDouble(3);
+                var rows = reader.IsDBNull(4) ? 0 : reader.GetInt64(4);
+                var logicalReads = reader.IsDBNull(5) ? 0 : reader.GetInt64(5);
+                var physicalReads = reader.IsDBNull(6) ? 0 : reader.GetInt64(6);
+                var ratio = logicalReads + physicalReads == 0
+                    ? (double?)null
+                    : logicalReads / (double)(logicalReads + physicalReads);
+
+                return new QueryHistoricalStatsInsight(
+                    calls,
+                    meanMs,
+                    totalMs,
+                    rows,
+                    ratio,
+                    queryText,
+                    "sys.dm_exec_query_stats");
+            }
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+
+        return null;
+    }
+
     private static async Task<List<SchemaColumnInfo>> ReadColumnsAsync(DbConnection connection, CancellationToken cancellationToken)
     {
         var columns = new List<SchemaColumnInfo>();

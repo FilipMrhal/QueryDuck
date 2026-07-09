@@ -15,6 +15,12 @@ data class ExpressionTreeNodeDto(
     val children: List<ExpressionTreeNodeDto>? = null,
 )
 
+data class SourceLocationDto(
+    val filePath: String = "",
+    val line: Int = 0,
+    val methodName: String? = null,
+)
+
 data class QueryCaptureEventDto(
     val eventId: String = "",
     val timestamp: String = "",
@@ -34,7 +40,12 @@ data class QueryCaptureEventDto(
     val improvementAnalysis: SlowQueryImprovementAnalysisDto? = null,
     val source: String = "EfCore",
     val bulkOperation: String? = null,
-    val schemaVersion: Int = 5,
+    val schemaVersion: Int = 8,
+    val traceId: String? = null,
+    val spanId: String? = null,
+    val correlationId: String? = null,
+    val requestPath: String? = null,
+    val sourceLocation: SourceLocationDto? = null,
 ) {
     val warningCount: Int get() = diagnostics.count { it.severity.equals("Warning", true) || it.severity.equals("Error", true) }
 
@@ -49,6 +60,16 @@ data class QueryCaptureEventDto(
     fun formattedDuration(): String =
         duration?.substringBefore('.')?.ifBlank { null } ?: "—"
 }
+
+data class QueryHistoricalStatsInsightDto(
+    val calls: Long = 0,
+    val meanExecTimeMs: Double = 0.0,
+    val totalExecTimeMs: Double = 0.0,
+    val rows: Long = 0,
+    val cacheHitRatio: Double? = null,
+    val matchedQueryText: String? = null,
+    val sourceView: String? = null,
+)
 
 data class PgStatStatementInsightDto(
     val calls: Long = 0,
@@ -84,6 +105,9 @@ data class SlowQueryRecommendationDto(
     val suggestedIndexSql: String? = null,
     val improvedPlanText: String? = null,
     val planDiff: PlanDiffVisualizationDto? = null,
+    val heuristicScore: Double? = null,
+    val heuristicHint: String? = null,
+    val suggestedMigrationSql: String? = null,
 )
 
 data class SlowQueryImprovementAnalysisDto(
@@ -93,10 +117,43 @@ data class SlowQueryImprovementAnalysisDto(
     val recommendations: List<SlowQueryRecommendationDto> = emptyList(),
     val primaryPlanDiff: PlanDiffVisualizationDto? = null,
     val pgStatStatements: PgStatStatementInsightDto? = null,
+    val historicalStats: QueryHistoricalStatsInsightDto? = null,
 )
 
 data class HealthResponse(
     val status: String = "",
     val count: Int = 0,
     val sessionWarnings: List<String> = emptyList(),
+)
+
+data class QueryHeuristicMemoryStatsDto(
+    val feedbackCount: Int = 0,
+    val distinctShapes: Int = 0,
+    val copiedCount: Int = 0,
+    val dismissedCount: Int = 0,
+    val storePath: String = "",
+)
+
+data class QueryDuckSessionSnapshotDto(
+    val capturedAt: String = "",
+    val eventCount: Int = 0,
+    val slowQueryCount: Int = 0,
+    val failureCount: Int = 0,
+    val diagnosticWarningCount: Int = 0,
+    val eventsByProvider: Map<String, Int> = emptyMap(),
+    val diagnosticsByRule: Map<String, Int> = emptyMap(),
+    val sessionWarnings: List<String> = emptyList(),
+)
+
+data class QueryDuckSessionComparisonDto(
+    val baseline: QueryDuckSessionSnapshotDto = QueryDuckSessionSnapshotDto(),
+    val current: QueryDuckSessionSnapshotDto = QueryDuckSessionSnapshotDto(),
+    val eventCountDelta: Int = 0,
+    val slowQueryCountDelta: Int = 0,
+    val failureCountDelta: Int = 0,
+    val diagnosticWarningCountDelta: Int = 0,
+    val newSessionWarnings: List<String> = emptyList(),
+    val resolvedSessionWarnings: List<String> = emptyList(),
+    val providerCountDeltas: Map<String, Int> = emptyMap(),
+    val ruleCountDeltas: Map<String, Int> = emptyMap(),
 )

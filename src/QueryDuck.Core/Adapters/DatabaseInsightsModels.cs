@@ -1,5 +1,14 @@
 namespace QueryDuck.Core.Adapters;
 
+public sealed record QueryHistoricalStatsInsight(
+    long Calls,
+    double MeanExecTimeMs,
+    double TotalExecTimeMs,
+    long Rows,
+    double? CacheHitRatio,
+    string? MatchedQueryText = null,
+    string? SourceView = null);
+
 public sealed record PgStatStatementInsight(
     long Calls,
     double MeanExecTimeMs,

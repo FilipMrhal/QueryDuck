@@ -11,7 +11,7 @@ public sealed class QueryDuckClientTests
     };
 
     [Fact]
-    public void DeserializeEventDto_roundTripsSchemaV5Fields()
+    public void DeserializeEventDto_roundTripsSchemaV7Fields()
     {
         const string json = """
             {
@@ -22,11 +22,23 @@ public sealed class QueryDuckClientTests
               "source": "EntityFrameworkExtensions",
               "bulkOperation": "BulkInsert",
               "duration": "00:00:00.9200000",
-              "schemaVersion": 6,
+              "schemaVersion": 7,
+              "traceId": "00-abc-def-01",
+              "spanId": "span-1",
+              "correlationId": "req-42",
+              "requestPath": "/api/orders",
               "improvementAnalysis": {
                 "eventId": "evt-1",
                 "durationMs": 920,
                 "originalSql": "SELECT * FROM orders",
+                "historicalStats": {
+                  "calls": 10,
+                  "meanExecTimeMs": 850.5,
+                  "totalExecTimeMs": 8505,
+                  "rows": 1000,
+                  "cacheHitRatio": 0.93,
+                  "sourceView": "pg_stat_statements"
+                },
                 "pgStatStatements": {
                   "calls": 10,
                   "meanExecTimeMs": 850.5,
@@ -51,11 +63,32 @@ public sealed class QueryDuckClientTests
         var dto = JsonSerializer.Deserialize<QueryCaptureEventDto>(json, JsonOptions);
 
         Assert.NotNull(dto);
-        Assert.Equal(6, dto!.SchemaVersion);
-        Assert.Equal("BulkInsert", dto.BulkOperation);
-        Assert.NotNull(dto.ImprovementAnalysis?.PgStatStatements);
-        Assert.Equal(10, dto.ImprovementAnalysis!.PgStatStatements!.Calls);
+        Assert.Equal(7, dto!.SchemaVersion);
+        Assert.Equal("req-42", dto.CorrelationId);
+        Assert.NotNull(dto.ImprovementAnalysis?.HistoricalStats);
+        Assert.Equal("pg_stat_statements", dto.ImprovementAnalysis!.HistoricalStats!.SourceView);
+        Assert.NotNull(dto.ImprovementAnalysis.PgStatStatements);
+        Assert.Equal(10, dto.ImprovementAnalysis.PgStatStatements!.Calls);
         Assert.NotNull(dto.ImprovementAnalysis.PrimaryPlanDiff?.SideBySideMermaid);
+    }
+
+    [Fact]
+    public void DeserializeEventDto_supportsLegacySchemaV6()
+    {
+        const string json = """
+            {
+              "eventId": "evt-legacy",
+              "timestamp": "2026-07-07T20:00:00Z",
+              "sql": "SELECT 1",
+              "provider": "PostgreSql",
+              "schemaVersion": 6
+            }
+            """;
+
+        var dto = JsonSerializer.Deserialize<QueryCaptureEventDto>(json, JsonOptions);
+
+        Assert.NotNull(dto);
+        Assert.Equal(6, dto!.SchemaVersion);
     }
 
     [Fact]

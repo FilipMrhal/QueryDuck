@@ -76,6 +76,23 @@ public sealed class PostgreSqlDatabaseAdapter : IDatabaseAdapter
         string sql,
         CancellationToken cancellationToken = default)
     {
+        var insight = await TryMatchHistoricalStatsAsync(connection, sql, cancellationToken).ConfigureAwait(false);
+        return insight is null
+            ? null
+            : new PgStatStatementInsight(
+                insight.Calls,
+                insight.MeanExecTimeMs,
+                insight.TotalExecTimeMs,
+                insight.Rows,
+                insight.CacheHitRatio ?? 0,
+                insight.MatchedQueryText);
+    }
+
+    public async Task<QueryHistoricalStatsInsight?> TryMatchHistoricalStatsAsync(
+        DbConnection connection,
+        string sql,
+        CancellationToken cancellationToken = default)
+    {
         ArgumentNullException.ThrowIfNull(connection);
         ArgumentException.ThrowIfNullOrWhiteSpace(sql);
 
@@ -99,7 +116,7 @@ public sealed class PostgreSqlDatabaseAdapter : IDatabaseAdapter
             while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
             {
                 var queryText = reader.GetString(0);
-                if (!PgStatStatementSqlMatcher.IsLikelyMatch(sql, queryText))
+                if (!QueryHistoricalStatsSqlMatcher.IsLikelyMatch(sql, queryText))
                 {
                     continue;
                 }
@@ -112,7 +129,14 @@ public sealed class PostgreSqlDatabaseAdapter : IDatabaseAdapter
                 var read = reader.GetInt64(6);
                 var ratio = hit + read == 0 ? 1.0 : hit / (double)(hit + read);
 
-                return new PgStatStatementInsight(calls, meanMs, totalMs, rows, ratio, queryText);
+                return new QueryHistoricalStatsInsight(
+                    calls,
+                    meanMs,
+                    totalMs,
+                    rows,
+                    ratio,
+                    queryText,
+                    "pg_stat_statements");
             }
         }
         catch (Exception)

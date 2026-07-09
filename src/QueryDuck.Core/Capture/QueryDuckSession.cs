@@ -4,6 +4,7 @@ public static class QueryDuckSession
 {
     private static readonly object Gate = new();
     private static string[] _warnings = [];
+    private static readonly List<string> _customWarnings = [];
 
     public static IReadOnlyList<string> Warnings
     {
@@ -35,7 +36,7 @@ public static class QueryDuckSession
 
         lock (Gate)
         {
-            _warnings = warnings.Distinct(StringComparer.Ordinal).ToArray();
+            _warnings = warnings.Concat(_customWarnings).Distinct(StringComparer.Ordinal).ToArray();
         }
     }
 
@@ -44,6 +45,21 @@ public static class QueryDuckSession
         lock (Gate)
         {
             _warnings = [];
+            _customWarnings.Clear();
+        }
+    }
+
+    public static void AddWarning(string warning)
+    {
+        if (string.IsNullOrWhiteSpace(warning))
+        {
+            return;
+        }
+
+        lock (Gate)
+        {
+            _customWarnings.Add(warning);
+            _warnings = _warnings.Concat([warning]).Distinct(StringComparer.Ordinal).ToArray();
         }
     }
 }

@@ -1,14 +1,15 @@
 using System.Globalization;
 using System.Text;
+using QueryDuck.Core.Providers;
 
 namespace QueryDuck.Core.Performance;
 
 internal static class PlanDiffBuilder
 {
-    public static PlanDiffVisualization Build(string? originalPlan, string? improvedPlan, bool emitMermaid = false)
+    public static PlanDiffVisualization Build(string? originalPlan, string? improvedPlan, bool emitMermaid = false, DatabaseProvider provider = DatabaseProvider.Unknown)
     {
-        var originalSteps = ExecutionPlanAnalyzer.Analyze(originalPlan).Steps;
-        var improvedSteps = ExecutionPlanAnalyzer.Analyze(improvedPlan).Steps;
+        var originalSteps = ExecutionPlanAnalyzer.Analyze(originalPlan, provider).Steps;
+        var improvedSteps = ExecutionPlanAnalyzer.Analyze(improvedPlan, provider).Steps;
         var summary = BuildSummary(originalSteps, improvedSteps);
         var textDiff = BuildTextDiff(originalPlan, improvedPlan, originalSteps, improvedSteps, summary);
         return CreateVisualization(originalSteps, improvedSteps, summary, textDiff, emitMermaid);
@@ -17,9 +18,10 @@ internal static class PlanDiffBuilder
     public static PlanDiffVisualization BuildEstimated(
         string? originalPlan,
         SlowQueryRecommendation rewriteRecommendation,
-        bool emitMermaid = false)
+        bool emitMermaid = false,
+        DatabaseProvider provider = DatabaseProvider.Unknown)
     {
-        var originalSteps = ExecutionPlanAnalyzer.Analyze(originalPlan).Steps;
+        var originalSteps = ExecutionPlanAnalyzer.Analyze(originalPlan, provider).Steps;
         var estimatedCost = originalSteps.Count > 0 && originalSteps[0].Cost is { } cost ? cost * 0.05 : (double?)null;
         var improvedSteps = new List<PlanStepSummary>
         {

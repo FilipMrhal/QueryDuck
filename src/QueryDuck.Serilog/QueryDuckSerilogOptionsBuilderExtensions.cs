@@ -40,4 +40,29 @@ public static class QueryDuckSerilogOptionsBuilderExtensions
         options.AddSerilogExporter(logger, configureSerilog);
         configure?.Invoke(options);
     }
+
+    /// <summary>
+    /// Production sampling preset: exports failures and slow queries to Serilog while sampling fast successful queries.
+    /// </summary>
+    public static DbContextOptionsBuilder<TContext> UseQueryDuckProductionSampling<TContext>(
+        this DbContextOptionsBuilder<TContext> optionsBuilder,
+        ILogger logger,
+        double samplingRate = 0.05,
+        Action<QueryDuckSerilogOptions>? configureSerilog = null,
+        Action<QueryCaptureOptions>? configure = null,
+        DatabaseAdapterRegistry? adapters = null)
+        where TContext : DbContext
+    {
+        ArgumentNullException.ThrowIfNull(optionsBuilder);
+        ArgumentNullException.ThrowIfNull(logger);
+
+        return optionsBuilder.UseQueryDuckCapture(
+            o =>
+            {
+                ConfigureProductionDefaults(o, logger, configureSerilog, configure);
+                o.EnableSampling = true;
+                o.SamplingRate = samplingRate;
+            },
+            adapters);
+    }
 }

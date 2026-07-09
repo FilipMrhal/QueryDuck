@@ -66,6 +66,7 @@ public sealed class RuleEngineExtendedTests
         Assert.Equal(DatabaseProvider.PostgreSql, DatabaseProviderNames.FromProviderName(DatabaseProviderNames.PostgreSql));
         Assert.Equal(DatabaseProvider.SqlServer, DatabaseProviderNames.FromProviderName(DatabaseProviderNames.SqlServer));
         Assert.Equal(DatabaseProvider.MySql, DatabaseProviderNames.FromProviderName(DatabaseProviderNames.MySql));
+        Assert.Equal(DatabaseProvider.Sqlite, DatabaseProviderNames.FromProviderName(DatabaseProviderNames.Sqlite));
         Assert.Equal(DatabaseProvider.Unknown, DatabaseProviderNames.FromProviderName("Microsoft.EntityFrameworkCore.InMemory"));
     }
 }

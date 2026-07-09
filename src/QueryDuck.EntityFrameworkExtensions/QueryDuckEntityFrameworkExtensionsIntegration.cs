@@ -4,6 +4,7 @@ using System.Text;
 using Microsoft.EntityFrameworkCore;
 using QueryDuck.Core.Adapters;
 using QueryDuck.Core.Capture;
+using QueryDuck.Core.Learning;
 using Z.BulkOperations;
 using Z.EntityFramework.Extensions;
 using BatchDelete = Z.EntityFramework.Extensions.BatchDelete;
@@ -33,6 +34,7 @@ public static class QueryDuckEntityFrameworkExtensionsIntegration
         var resolvedOptions = options ?? QueryDuckCaptureRuntime.CurrentOptions ?? new QueryCaptureOptions();
         QueryDuckCaptureRuntime.CurrentOptions = resolvedOptions;
         QueryDuckCaptureRuntime.Adapters = adapters ?? QueryDuckCaptureRuntime.Adapters;
+        QueryHeuristicMemory.Configure(resolvedOptions);
         _pipeline = new QueryCapturePipeline(resolvedOptions, QueryDuckCaptureRuntime.Adapters);
 
         if (Interlocked.CompareExchange(ref _enabled, 1, 0) == 1)

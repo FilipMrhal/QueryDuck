@@ -26,6 +26,10 @@ internal static class QueryDuckSerilogEnricher
             ["IsSlow"] = context.IsSlow,
             ["Succeeded"] = captureEvent.Succeeded,
             ["SchemaVersion"] = captureEvent.SchemaVersion,
+            ["TraceId"] = captureEvent.TraceId,
+            ["SpanId"] = captureEvent.SpanId,
+            ["CorrelationId"] = captureEvent.CorrelationId,
+            ["RequestPath"] = captureEvent.RequestPath,
             ["WarningCount"] = captureEvent.Diagnostics.Count(d =>
                 string.Equals(d.Severity, "Warning", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(d.Severity, "Error", StringComparison.OrdinalIgnoreCase)),
@@ -179,21 +183,42 @@ internal static class QueryDuckSerilogEnricher
 
         if (analysis.PgStatStatements is not null)
         {
-            payload["PgStatStatements"] = new Dictionary<string, object?>
+            payload["PgStatStatements"] = BuildPgStatPayload(analysis.PgStatStatements, sensitive);
+        }
+
+        if (analysis.HistoricalStats is not null)
+        {
+            payload["HistoricalStats"] = new Dictionary<string, object?>
             {
-                ["Calls"] = analysis.PgStatStatements.Calls,
-                ["MeanExecTimeMs"] = analysis.PgStatStatements.MeanExecTimeMs,
-                ["TotalExecTimeMs"] = analysis.PgStatStatements.TotalExecTimeMs,
-                ["Rows"] = analysis.PgStatStatements.Rows,
-                ["SharedBlocksHitRatio"] = analysis.PgStatStatements.SharedBlocksHitRatio,
+                ["Calls"] = analysis.HistoricalStats.Calls,
+                ["MeanExecTimeMs"] = analysis.HistoricalStats.MeanExecTimeMs,
+                ["TotalExecTimeMs"] = analysis.HistoricalStats.TotalExecTimeMs,
+                ["Rows"] = analysis.HistoricalStats.Rows,
+                ["CacheHitRatio"] = analysis.HistoricalStats.CacheHitRatio,
+                ["SourceView"] = analysis.HistoricalStats.SourceView,
                 ["MatchedQueryText"] = sensitive.IncludePgStatMatchedQueryText && sensitive.IncludeSensitiveData
-                    ? analysis.PgStatStatements.MatchedQueryText
+                    ? analysis.HistoricalStats.MatchedQueryText
                     : null,
             };
         }
 
         return payload;
     }
+
+    private static Dictionary<string, object?> BuildPgStatPayload(
+        PgStatStatementInsightDto pgStat,
+        QueryDuckSensitiveDataLoggingOptions sensitive) =>
+        new()
+        {
+            ["Calls"] = pgStat.Calls,
+            ["MeanExecTimeMs"] = pgStat.MeanExecTimeMs,
+            ["TotalExecTimeMs"] = pgStat.TotalExecTimeMs,
+            ["Rows"] = pgStat.Rows,
+            ["SharedBlocksHitRatio"] = pgStat.SharedBlocksHitRatio,
+            ["MatchedQueryText"] = sensitive.IncludePgStatMatchedQueryText && sensitive.IncludeSensitiveData
+                ? pgStat.MatchedQueryText
+                : null,
+        };
 
     private static Dictionary<string, object?> SerializeExpressionTree(
         ExpressionTreeNode node,

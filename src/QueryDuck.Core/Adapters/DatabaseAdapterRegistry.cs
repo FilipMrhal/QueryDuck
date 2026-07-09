@@ -2,6 +2,7 @@ using QueryDuck.Core.Providers;
 using QueryDuck.MySql;
 using QueryDuck.Oracle;
 using QueryDuck.PostgreSql;
+using QueryDuck.Sqlite;
 using QueryDuck.SqlServer;
 
 namespace QueryDuck.Core.Adapters;
@@ -38,5 +39,6 @@ public sealed class DatabaseAdapterRegistry
             .AddOracle()
             .AddPostgreSql()
             .AddSqlServer()
-            .AddMySql();
+            .AddMySql()
+            .AddSqlite();
 }

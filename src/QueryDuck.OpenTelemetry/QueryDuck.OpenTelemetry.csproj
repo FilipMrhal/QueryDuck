@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>QueryDuck.OpenTelemetry</RootNamespace>
+    <Description>OpenTelemetry exporter for QueryDuck SQL capture events as distributed trace spans.</Description>
+    <NoWarn>$(NoWarn);CA1515;CA1308;CA1859</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\QueryDuck.Core\QueryDuck.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="OpenTelemetry.Api" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="QueryDuck.Tests" />
+  </ItemGroup>
+
+</Project>

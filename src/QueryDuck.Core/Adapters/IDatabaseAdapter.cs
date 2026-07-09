@@ -29,11 +29,40 @@ public sealed record TypeMismatch(
     string DatabaseType,
     string Message);
 
+public sealed record MissingColumnFinding(
+    string EntityType,
+    string PropertyName,
+    string ExpectedColumn,
+    string Message);
+
+public sealed record MissingIndexFinding(
+    string TableName,
+    string ColumnName,
+    string Message);
+
+public sealed record ForeignKeyFinding(
+    string TableName,
+    string ColumnName,
+    string ReferencedTable,
+    string Message);
+
 public sealed record SchemaAuditResult(
     IReadOnlyList<NullabilityMismatch> NullabilityMismatches,
-    IReadOnlyList<TypeMismatch> TypeMismatches)
+    IReadOnlyList<TypeMismatch> TypeMismatches,
+    IReadOnlyList<MissingColumnFinding> MissingColumns = null!,
+    IReadOnlyList<MissingIndexFinding> MissingIndexes = null!,
+    IReadOnlyList<ForeignKeyFinding> ForeignKeyIssues = null!)
 {
-    public bool HasIssues => NullabilityMismatches.Count > 0 || TypeMismatches.Count > 0;
+    public IReadOnlyList<MissingColumnFinding> MissingColumns { get; init; } = MissingColumns ?? [];
+    public IReadOnlyList<MissingIndexFinding> MissingIndexes { get; init; } = MissingIndexes ?? [];
+    public IReadOnlyList<ForeignKeyFinding> ForeignKeyIssues { get; init; } = ForeignKeyIssues ?? [];
+
+    public bool HasIssues =>
+        NullabilityMismatches.Count > 0 ||
+        TypeMismatches.Count > 0 ||
+        MissingColumns.Count > 0 ||
+        MissingIndexes.Count > 0 ||
+        ForeignKeyIssues.Count > 0;
 }
 
 public sealed record ExecutionPlanResult(
@@ -66,6 +95,12 @@ public interface IDatabaseAdapter
         string sql,
         CancellationToken cancellationToken = default) =>
         Task.FromResult<PgStatStatementInsight?>(null);
+
+    Task<QueryHistoricalStatsInsight?> TryMatchHistoricalStatsAsync(
+        DbConnection connection,
+        string sql,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<QueryHistoricalStatsInsight?>(null);
 
     Task<IReadOnlyList<ColumnStatistics>> GetColumnStatisticsAsync(
         DbConnection connection,

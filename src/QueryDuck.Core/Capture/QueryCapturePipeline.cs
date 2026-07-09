@@ -2,6 +2,7 @@ using System.Data.Common;
 using Microsoft.EntityFrameworkCore;
 using QueryDuck.Core.Adapters;
 using QueryDuck.Core.Performance;
+using QueryDuck.Core.Learning;
 using QueryDuck.Core.Providers;
 
 namespace QueryDuck.Core.Capture;
@@ -131,6 +132,12 @@ public sealed class QueryCapturePipeline
         var provider = DatabaseProviderNames.FromProviderName(context?.Database.ProviderName);
         var isSlow = _options.SlowQueryThresholdMs > 0 &&
             duration.TotalMilliseconds >= _options.SlowQueryThresholdMs;
+
+        if (succeeded && !isSlow && _options.EnableSampling && !QueryCaptureSampling.ShouldCapture(_options))
+        {
+            return;
+        }
+
         var shouldCapturePlan = succeeded &&
             (_options.CaptureExecutionPlans || (_options.CapturePlansForSlowQueries && isSlow));
 
@@ -180,6 +187,7 @@ public sealed class QueryCapturePipeline
             };
 
             PgStatStatementInsight? pgStat = null;
+            QueryHistoricalStatsInsight? historicalStats = null;
             Dictionary<string, IReadOnlyList<ColumnStatistics>> tableStatistics = new(StringComparer.OrdinalIgnoreCase);
 
             if (adapter is not null && connection is not null)
@@ -191,10 +199,20 @@ public sealed class QueryCapturePipeline
                         await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
                     }
 
-                    if (_options.EnablePgStatStatementsInsights && provider == DatabaseProvider.PostgreSql)
+                    if (_options.EnableHistoricalStatsInsights)
                     {
-                        pgStat = await adapter.TryMatchPgStatStatementAsync(connection, sql, cancellationToken)
+                        historicalStats = await adapter.TryMatchHistoricalStatsAsync(connection, sql, cancellationToken)
                             .ConfigureAwait(false);
+                        if (historicalStats is not null && provider == DatabaseProvider.PostgreSql)
+                        {
+                            pgStat = new PgStatStatementInsight(
+                                historicalStats.Calls,
+                                historicalStats.MeanExecTimeMs,
+                                historicalStats.TotalExecTimeMs,
+                                historicalStats.Rows,
+                                historicalStats.CacheHitRatio ?? 0,
+                                historicalStats.MatchedQueryText);
+                        }
                     }
 
                     if (_options.EnableStatisticsBasedIndexRecommendations)
@@ -203,6 +221,15 @@ public sealed class QueryCapturePipeline
                             adapter,
                             connection,
                             sql,
+                            cancellationToken).ConfigureAwait(false);
+                    }
+
+                    if (context?.Model is not null)
+                    {
+                        await QueryDuckSchemaAuditCache.TryRefreshAsync(
+                            adapter,
+                            context.Model,
+                            connection,
                             cancellationToken).ConfigureAwait(false);
                     }
                 }
@@ -214,6 +241,7 @@ public sealed class QueryCapturePipeline
 
             var improvementContext = new SlowQueryImprovementContext(
                 pgStat,
+                historicalStats,
                 tableStatistics,
                 _options.EmitMermaidPlanGraphs);
 
@@ -230,7 +258,17 @@ public sealed class QueryCapturePipeline
                     cancellationToken).ConfigureAwait(false);
             }
 
+            if (_options.EnableHeuristicMemory)
+            {
+                analysis = QueryHeuristicMemory.Apply(analysis, provider.ToString());
+            }
+
             improvementAnalysis = analysis.ToDto();
+        }
+
+        if (succeeded && isSlow && _options.EnableHeuristicMemory)
+        {
+            QueryHeuristicMemory.RecordSlowCapture(provider.ToString(), sql, duration.TotalMilliseconds);
         }
 
         var captureEvent = QueryCaptureEventFactory.Create(
@@ -246,8 +284,10 @@ public sealed class QueryCapturePipeline
             improvementAnalysis,
             succeeded,
             errorMessage,
-            exceptionType);
+            exceptionType,
+            _options.CaptureSourceLocations ? SourceLocationCapture.CaptureFromCaller() : null);
         QueryDuckCapture.SharedBuffer.Add(captureEvent);
+        QueryDuckTransactionTimeline.RecordQuery(captureEvent);
         QueryDuckSession.Refresh(QueryDuckCapture.LastCommands, _options);
         await PublishAsync(captureEvent, isSlow, cancellationToken).ConfigureAwait(false);
     }

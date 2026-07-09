@@ -7,6 +7,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using QueryDuck.Core;
 using QueryDuck.Core.Capture;
+using QueryDuck.Core.Learning;
 using QueryDuck.Sample;
 
 namespace QueryDuck.Tests;
@@ -232,6 +233,54 @@ public sealed class EventServerTests : IAsyncLifetime
         Assert.Equal(2, QueryDuckCapture.LastCommands.Count);
     }
 
+    [Fact]
+    public async Task MemoryFeedback_RecordsAndReturnsStats()
+    {
+        var storePath = Path.Combine(Path.GetTempPath(), $"queryduck-memory-api-{Guid.NewGuid():N}.db");
+        try
+        {
+            StartServer();
+            QueryHeuristicMemory.Configure(new QueryCaptureOptions
+            {
+                EnableHeuristicMemory = true,
+                HeuristicMemoryStorePath = storePath,
+            });
+
+            using var client = new HttpClient();
+            var payload = JsonSerializer.Serialize(new
+            {
+                provider = "PostgreSql",
+                sql = "SELECT * FROM Orders WHERE Id = @p0",
+                category = "IndexCreation",
+                title = "Add index on Id",
+                action = "Copied",
+            }, JsonOptions);
+            using var content = new StringContent(payload, Encoding.UTF8, "application/json");
+            var feedbackResponse = await client.PostAsync(new Uri(Prefix, "queryduck/memory/feedback"), content);
+            feedbackResponse.EnsureSuccessStatusCode();
+
+            var stats = await client.GetFromJsonAsync<MemoryStatsResponse>(new Uri(Prefix, "queryduck/memory/stats"));
+            Assert.NotNull(stats);
+            Assert.Equal(1, stats.FeedbackCount);
+            Assert.Equal(1, stats.CopiedCount);
+
+            var clearResponse = await client.PostAsync(new Uri(Prefix, "queryduck/memory/clear"), null);
+            clearResponse.EnsureSuccessStatusCode();
+
+            stats = await client.GetFromJsonAsync<MemoryStatsResponse>(new Uri(Prefix, "queryduck/memory/stats"));
+            Assert.NotNull(stats);
+            Assert.Equal(0, stats.FeedbackCount);
+        }
+        finally
+        {
+            QueryHeuristicMemory.Configure(new QueryCaptureOptions { EnableHeuristicMemory = false });
+            if (File.Exists(storePath))
+            {
+                File.Delete(storePath);
+            }
+        }
+    }
+
     private static void StartServer()
     {
         QueryDuckOptionsBuilderExtensions.EnsureEventServer(new QueryCaptureOptions
@@ -250,4 +299,11 @@ public sealed class EventServerTests : IAsyncLifetime
     };
 
     private sealed record HealthResponse(string Status, int Count);
+
+    private sealed record MemoryStatsResponse(
+        int FeedbackCount,
+        int DistinctShapes,
+        int CopiedCount,
+        int DismissedCount,
+        string StorePath);
 }

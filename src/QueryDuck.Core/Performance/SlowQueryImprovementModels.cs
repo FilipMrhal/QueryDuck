@@ -33,7 +33,10 @@ public sealed record SlowQueryRecommendation(
     string? SuggestedSql = null,
     string? SuggestedIndexSql = null,
     string? ImprovedPlanText = null,
-    PlanDiffVisualization? PlanDiff = null);
+    PlanDiffVisualization? PlanDiff = null,
+    double? HeuristicScore = null,
+    string? HeuristicHint = null,
+    string? SuggestedMigrationSql = null);
 
 public sealed record SlowQueryImprovementAnalysis(
     string EventId,
@@ -41,4 +44,5 @@ public sealed record SlowQueryImprovementAnalysis(
     string OriginalSql,
     IReadOnlyList<SlowQueryRecommendation> Recommendations,
     PlanDiffVisualization? PrimaryPlanDiff = null,
+    QueryHistoricalStatsInsight? HistoricalStats = null,
     PgStatStatementInsight? PgStatStatements = null);

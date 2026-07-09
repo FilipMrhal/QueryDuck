@@ -32,7 +32,7 @@ public static class SlowQueryImprovementEngine
 
         var sql = captureEvent.Sql;
         var patterns = SqlPatternAnalyzer.Analyze(sql);
-        var plan = ExecutionPlanAnalyzer.Analyze(captureEvent.ExecutionPlan);
+        var plan = ExecutionPlanAnalyzer.Analyze(captureEvent.ExecutionPlan, provider);
         var recommendations = new List<SlowQueryRecommendation>();
         var emitMermaid = context?.EmitMermaidPlanGraphs == true;
 
@@ -76,7 +76,8 @@ public static class SlowQueryImprovementEngine
                     captureEvent.ExecutionPlan,
                     new SlowQueryRecommendation(
                         SlowQueryImprovementCategory.ManualRewrite, "Replace SELECT *", "", rewrite),
-                    emitMermaid)));
+                    emitMermaid,
+                    provider)));
         }
 
         if (patterns.LeadingWildcardLike)
@@ -115,7 +116,8 @@ public static class SlowQueryImprovementEngine
                         captureEvent.ExecutionPlan,
                         new SlowQueryRecommendation(
                             SlowQueryImprovementCategory.ManualRewrite, "UNION ALL rewrite", "", unionSql),
-                        emitMermaid)
+                        emitMermaid,
+                        provider)
                     : null));
         }
 
@@ -153,7 +155,13 @@ public static class SlowQueryImprovementEngine
                 "Nested loops plus full scans usually mean a missing index on the inner join key."));
         }
 
-        if (context?.PgStatStatements is { } pgStat)
+        if (context?.HistoricalStats is { } historical)
+        {
+            recommendations.Insert(0, HistoricalStatsRecommendation(
+                historical,
+                captureEvent.Duration.TotalMilliseconds));
+        }
+        else if (context?.PgStatStatements is { } pgStat)
         {
             recommendations.Insert(0, new SlowQueryRecommendation(
                 SlowQueryImprovementCategory.ApplicationChange,
@@ -162,14 +170,46 @@ public static class SlowQueryImprovementEngine
         }
 
         var primaryRewrite = FindPrimaryRewrite(recommendations);
+        var enriched = EnrichWithMigrationSnippets(recommendations, provider);
 
         return new SlowQueryImprovementAnalysis(
             captureEvent.EventId,
             captureEvent.Duration.TotalMilliseconds,
             sql,
-            recommendations,
-            primaryRewrite?.PlanDiff ?? FindFirstPlanDiff(recommendations),
+            enriched,
+            primaryRewrite?.PlanDiff ?? FindFirstPlanDiff(enriched),
+            context?.HistoricalStats,
             context?.PgStatStatements);
+    }
+
+    private static IReadOnlyList<SlowQueryRecommendation> EnrichWithMigrationSnippets(
+        IReadOnlyList<SlowQueryRecommendation> recommendations,
+        DatabaseProvider provider)
+    {
+        return recommendations
+            .Select(r => string.IsNullOrWhiteSpace(r.SuggestedIndexSql)
+                ? r
+                : r with
+                {
+                    SuggestedMigrationSql = MigrationSnippetBuilder.FromIndexDdl(r.SuggestedIndexSql, provider),
+                })
+            .ToArray();
+    }
+
+    private static SlowQueryRecommendation HistoricalStatsRecommendation(
+        QueryHistoricalStatsInsight historical,
+        double currentDurationMs) =>
+        new(
+            SlowQueryImprovementCategory.ApplicationChange,
+            $"Historical workload from {historical.SourceView ?? "database stats"}",
+            BuildHistoricalStatsSummary(historical, currentDurationMs));
+
+    private static string BuildHistoricalStatsSummary(QueryHistoricalStatsInsight insight, double currentDurationMs)
+    {
+        var cache = insight.CacheHitRatio.HasValue ? $", cache hit {insight.CacheHitRatio:P0}" : string.Empty;
+        return
+            $"{insight.SourceView ?? "Historical stats"}: {insight.Calls} calls, mean {insight.MeanExecTimeMs:F1} ms, " +
+            $"total {insight.TotalExecTimeMs:F0} ms, {insight.Rows} rows returned{cache}. Current capture: {currentDurationMs:F0} ms.";
     }
 
     private static SlowQueryRecommendation? TryStatisticsIndexRecommendation(
@@ -286,7 +326,7 @@ public static class SlowQueryImprovementEngine
                     parameters,
                     cancellationToken).ConfigureAwait(false);
 
-                var planDiff = PlanDiffBuilder.Build(originalPlanText, improvedPlan.PlanText, emitMermaidPlanGraphs);
+                var planDiff = PlanDiffBuilder.Build(originalPlanText, improvedPlan.PlanText, emitMermaidPlanGraphs, adapter.Provider);
                 recommendations[i] = recommendation with
                 {
                     ImprovedPlanText = improvedPlan.PlanText,
@@ -306,7 +346,8 @@ public static class SlowQueryImprovementEngine
             primaryPlanDiff = PlanDiffBuilder.Build(
                 originalPlanText,
                 recommendations.Select(r => r.ImprovedPlanText).FirstOrDefault(t => !string.IsNullOrWhiteSpace(t)),
-                emitMermaid: true);
+                emitMermaid: true,
+                adapter.Provider);
         }
 
         return analysis with

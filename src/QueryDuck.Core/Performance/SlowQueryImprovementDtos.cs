@@ -2,6 +2,15 @@ using QueryDuck.Core.Adapters;
 
 namespace QueryDuck.Core.Performance;
 
+public sealed record QueryHistoricalStatsInsightDto(
+    long Calls,
+    double MeanExecTimeMs,
+    double TotalExecTimeMs,
+    long Rows,
+    double? CacheHitRatio,
+    string? MatchedQueryText = null,
+    string? SourceView = null);
+
 public sealed record PgStatStatementInsightDto(
     long Calls,
     double MeanExecTimeMs,
@@ -32,7 +41,10 @@ public sealed record SlowQueryRecommendationDto(
     string? SuggestedSql = null,
     string? SuggestedIndexSql = null,
     string? ImprovedPlanText = null,
-    PlanDiffVisualizationDto? PlanDiff = null);
+    PlanDiffVisualizationDto? PlanDiff = null,
+    double? HeuristicScore = null,
+    string? HeuristicHint = null,
+    string? SuggestedMigrationSql = null);
 
 public sealed record SlowQueryImprovementAnalysisDto(
     string EventId,
@@ -40,6 +52,7 @@ public sealed record SlowQueryImprovementAnalysisDto(
     string OriginalSql,
     IReadOnlyList<SlowQueryRecommendationDto> Recommendations,
     PlanDiffVisualizationDto? PrimaryPlanDiff = null,
+    QueryHistoricalStatsInsightDto? HistoricalStats = null,
     PgStatStatementInsightDto? PgStatStatements = null);
 
 internal static class SlowQueryImprovementMapping
@@ -51,7 +64,18 @@ internal static class SlowQueryImprovementMapping
             analysis.OriginalSql,
             analysis.Recommendations.Select(r => r.ToDto()).ToArray(),
             analysis.PrimaryPlanDiff?.ToDto(),
+            analysis.HistoricalStats?.ToDto(),
             analysis.PgStatStatements?.ToDto());
+
+    private static QueryHistoricalStatsInsightDto ToDto(this QueryHistoricalStatsInsight insight) =>
+        new(
+            insight.Calls,
+            insight.MeanExecTimeMs,
+            insight.TotalExecTimeMs,
+            insight.Rows,
+            insight.CacheHitRatio,
+            insight.MatchedQueryText,
+            insight.SourceView);
 
     private static PgStatStatementInsightDto ToDto(this PgStatStatementInsight insight) =>
         new(
@@ -70,7 +94,10 @@ internal static class SlowQueryImprovementMapping
             recommendation.SuggestedSql,
             recommendation.SuggestedIndexSql,
             recommendation.ImprovedPlanText,
-            recommendation.PlanDiff?.ToDto());
+            recommendation.PlanDiff?.ToDto(),
+            recommendation.HeuristicScore,
+            recommendation.HeuristicHint,
+            recommendation.SuggestedMigrationSql);
 
     private static PlanDiffVisualizationDto ToDto(this PlanDiffVisualization visualization) =>
         new(

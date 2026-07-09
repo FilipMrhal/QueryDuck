@@ -7,6 +7,7 @@ public enum DatabaseProvider
     PostgreSql,
     SqlServer,
     MySql,
+    Sqlite,
 }
 
 public static class DatabaseProviderNames
@@ -15,6 +16,7 @@ public static class DatabaseProviderNames
     public const string PostgreSql = "Npgsql.EntityFrameworkCore.PostgreSQL";
     public const string SqlServer = "Microsoft.EntityFrameworkCore.SqlServer";
     public const string MySql = "Pomelo.EntityFrameworkCore.MySql";
+    public const string Sqlite = "Microsoft.EntityFrameworkCore.Sqlite";
 
     public static DatabaseProvider FromProviderName(string? providerName) => providerName switch
     {
@@ -22,6 +24,7 @@ public static class DatabaseProviderNames
         PostgreSql => DatabaseProvider.PostgreSql,
         SqlServer => DatabaseProvider.SqlServer,
         MySql => DatabaseProvider.MySql,
+        Sqlite => DatabaseProvider.Sqlite,
         _ => DatabaseProvider.Unknown,
     };
 }

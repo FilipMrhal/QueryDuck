@@ -69,6 +69,7 @@ class TitledCodeEditorPanel(
     project: Project,
     private val copyLabel: String,
     languageId: String,
+    private val onCopy: (() -> Unit)? = null,
 ) : JPanel(BorderLayout()) {
     private val editor = QueryDuckCodeEditor(project, languageId)
 
@@ -88,6 +89,7 @@ class TitledCodeEditorPanel(
                 JButton("Copy $label").apply {
                     addActionListener {
                         CopyPasteManager.getInstance().setContents(StringSelection(editor.getText()))
+                        onCopy?.invoke()
                     }
                 },
                 BorderLayout.EAST,

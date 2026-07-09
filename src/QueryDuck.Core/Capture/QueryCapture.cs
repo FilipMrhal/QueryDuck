@@ -65,7 +65,17 @@ public sealed record QueryCaptureEvent
 
     public string? ExceptionType { get; init; }
 
-    public int SchemaVersion { get; init; } = 6;
+    public string? TraceId { get; init; }
+
+    public string? SpanId { get; init; }
+
+    public string? CorrelationId { get; init; }
+
+    public string? RequestPath { get; init; }
+
+    public SourceLocation? SourceLocation { get; init; }
+
+    public int SchemaVersion { get; init; } = 8;
 }
 
 public sealed class QueryCaptureOptions
@@ -99,9 +109,20 @@ public sealed class QueryCaptureOptions
     public bool CapturePlansForSlowQueries { get; set; } = true;
 
     /// <summary>
-    /// When true, enriches slow PostgreSQL queries with matching <c>pg_stat_statements</c> metrics.
+    /// When true, enriches slow queries with historical workload stats from the active provider
+    /// (pg_stat_statements, dm_exec_query_stats, V$SQL, performance_schema, etc.).
     /// </summary>
-    public bool EnablePgStatStatementsInsights { get; set; }
+    public bool EnableHistoricalStatsInsights { get; set; }
+
+    /// <summary>
+    /// When true, enriches slow PostgreSQL queries with matching <c>pg_stat_statements</c> metrics.
+    /// Alias for <see cref="EnableHistoricalStatsInsights"/>.
+    /// </summary>
+    public bool EnablePgStatStatementsInsights
+    {
+        get => EnableHistoricalStatsInsights;
+        set => EnableHistoricalStatsInsights = value;
+    }
 
     /// <summary>
     /// When true, reads <c>pg_stats</c> (PostgreSQL) to refine index recommendations with column selectivity.
@@ -112,6 +133,36 @@ public sealed class QueryCaptureOptions
     /// When true, attaches Mermaid flowchart graphs to plan diff visualizations for Rider rendering.
     /// </summary>
     public bool EmitMermaidPlanGraphs { get; set; }
+
+    /// <summary>
+    /// When true, learns from slow-query captures and IDE feedback to re-rank recommendations locally.
+    /// </summary>
+    public bool EnableHeuristicMemory { get; set; } = true;
+
+    /// <summary>
+    /// SQLite path for heuristic memory. Defaults to <c>~/.queryduck/memory.db</c>.
+    /// </summary>
+    public string? HeuristicMemoryStorePath { get; set; }
+
+    /// <summary>
+    /// Maximum feedback rows retained before oldest entries are pruned.
+    /// </summary>
+    public int HeuristicMemoryMaxEntries { get; set; } = 5000;
+
+    /// <summary>
+    /// When true, only a sample of successful fast queries are captured (failures and slow queries are always captured).
+    /// </summary>
+    public bool EnableSampling { get; set; }
+
+    /// <summary>
+    /// Sampling rate for successful fast queries when <see cref="EnableSampling"/> is true (0.0–1.0).
+    /// </summary>
+    public double SamplingRate { get; set; } = 0.05;
+
+    /// <summary>
+    /// When true, captures user-code file/line from the call stack for Rider jump-to-source.
+    /// </summary>
+    public bool CaptureSourceLocations { get; set; } = true;
 
     /// <summary>
     /// Optional exporters invoked after each captured query (e.g. Serilog structured logging).
@@ -131,6 +182,9 @@ public static partial class QueryDuckCapture
     {
         Buffer.Clear();
         QueryDuckSession.Clear();
+        QueryDuckSchemaAuditCache.Clear();
+        QueryDuckSessionComparer.ClearBaseline();
+        QueryDuckTransactionTimeline.Clear();
     }
 
     public static void Record(QueryCaptureEvent captureEvent)

@@ -25,6 +25,7 @@
     <ProjectReference Include="..\..\src\QueryDuck.Client\QueryDuck.Client.csproj" />
     <ProjectReference Include="..\..\src\QueryDuck.Core\QueryDuck.Core.csproj" />
     <ProjectReference Include="..\..\src\QueryDuck.Serilog\QueryDuck.Serilog.csproj" />
+    <ProjectReference Include="..\..\src\QueryDuck.OpenTelemetry\QueryDuck.OpenTelemetry.csproj" />
     <ProjectReference Include="..\..\src\QueryDuck.Analyzers\QueryDuck.Analyzers.csproj"
                       OutputItemType="Analyzer"
                       ReferenceOutputAssembly="false" />

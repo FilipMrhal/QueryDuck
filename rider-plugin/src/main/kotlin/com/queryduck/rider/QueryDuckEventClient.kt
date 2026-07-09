@@ -59,6 +59,222 @@ class QueryDuckEventClient(
             throw QueryDuckClientException("Clear failed: HTTP ${response.statusCode()}")
         }
     }
+
+    fun fetchSchemaAudit(): String {
+        val request = HttpRequest.newBuilder()
+            .uri(URI.create("$baseUrl/queryduck/schema/audit"))
+            .timeout(Duration.ofSeconds(3))
+            .GET()
+            .build()
+
+        val response = http.send(request, HttpResponse.BodyHandlers.ofString())
+        if (response.statusCode() != 200) {
+            throw QueryDuckClientException("HTTP ${response.statusCode()}: ${response.body()}")
+        }
+
+        return response.body()
+    }
+
+    fun setSessionBaseline(): QueryDuckSessionSnapshotDto {
+        val request = HttpRequest.newBuilder()
+            .uri(URI.create("$baseUrl/queryduck/session/baseline"))
+            .timeout(Duration.ofSeconds(3))
+            .POST(HttpRequest.BodyPublishers.noBody())
+            .build()
+
+        val response = http.send(request, HttpResponse.BodyHandlers.ofString())
+        if (response.statusCode() != 200) {
+            throw QueryDuckClientException("HTTP ${response.statusCode()}: ${response.body()}")
+        }
+
+        return gson.fromJson(response.body(), QueryDuckSessionSnapshotDto::class.java)
+    }
+
+    fun compareSession(): QueryDuckSessionComparisonDto {
+        val request = HttpRequest.newBuilder()
+            .uri(URI.create("$baseUrl/queryduck/session/compare"))
+            .timeout(Duration.ofSeconds(3))
+            .GET()
+            .build()
+
+        val response = http.send(request, HttpResponse.BodyHandlers.ofString())
+        if (response.statusCode() != 200) {
+            throw QueryDuckClientException("HTTP ${response.statusCode()}: ${response.body()}")
+        }
+
+        return gson.fromJson(response.body(), QueryDuckSessionComparisonDto::class.java)
+    }
+
+    fun exportSession(): String {
+        val request = HttpRequest.newBuilder()
+            .uri(URI.create("$baseUrl/queryduck/session/export"))
+            .timeout(Duration.ofSeconds(5))
+            .GET()
+            .build()
+
+        val response = http.send(request, HttpResponse.BodyHandlers.ofString())
+        if (response.statusCode() != 200) {
+            throw QueryDuckClientException("HTTP ${response.statusCode()}")
+        }
+
+        return response.body()
+    }
+
+    fun importSession(json: String): Int {
+        val request = HttpRequest.newBuilder()
+            .uri(URI.create("$baseUrl/queryduck/session/import"))
+            .timeout(Duration.ofSeconds(5))
+            .header("Content-Type", "application/json")
+            .POST(HttpRequest.BodyPublishers.ofString(json))
+            .build()
+
+        val response = http.send(request, HttpResponse.BodyHandlers.ofString())
+        if (response.statusCode() != 200) {
+            throw QueryDuckClientException("Import failed: HTTP ${response.statusCode()}")
+        }
+
+        val map = gson.fromJson(response.body(), Map::class.java)
+        return (map["imported"] as? Number)?.toInt() ?: 0
+    }
+
+    fun fetchSessionHotspots(): String {
+        val request = HttpRequest.newBuilder()
+            .uri(URI.create("$baseUrl/queryduck/session/hotspots"))
+            .timeout(Duration.ofSeconds(3))
+            .GET()
+            .build()
+
+        val response = http.send(request, HttpResponse.BodyHandlers.ofString())
+        if (response.statusCode() != 200) {
+            throw QueryDuckClientException("HTTP ${response.statusCode()}")
+        }
+
+        return response.body()
+    }
+
+    fun fetchSessionTimeline(): String {
+        val request = HttpRequest.newBuilder()
+            .uri(URI.create("$baseUrl/queryduck/session/timeline"))
+            .timeout(Duration.ofSeconds(3))
+            .GET()
+            .build()
+
+        val response = http.send(request, HttpResponse.BodyHandlers.ofString())
+        if (response.statusCode() != 200) {
+            throw QueryDuckClientException("HTTP ${response.statusCode()}")
+        }
+
+        return response.body()
+    }
+
+    fun fetchSessionTraces(): String {
+        val request = HttpRequest.newBuilder()
+            .uri(URI.create("$baseUrl/queryduck/session/traces"))
+            .timeout(Duration.ofSeconds(3))
+            .GET()
+            .build()
+
+        val response = http.send(request, HttpResponse.BodyHandlers.ofString())
+        if (response.statusCode() != 200) {
+            throw QueryDuckClientException("HTTP ${response.statusCode()}")
+        }
+
+        return response.body()
+    }
+
+    fun diffEvents(leftEventId: String, rightEventId: String): String {
+        val payload = gson.toJson(mapOf("leftEventId" to leftEventId, "rightEventId" to rightEventId))
+        val request = HttpRequest.newBuilder()
+            .uri(URI.create("$baseUrl/queryduck/events/diff"))
+            .timeout(Duration.ofSeconds(3))
+            .header("Content-Type", "application/json")
+            .POST(HttpRequest.BodyPublishers.ofString(payload))
+            .build()
+
+        val response = http.send(request, HttpResponse.BodyHandlers.ofString())
+        if (response.statusCode() != 200) {
+            throw QueryDuckClientException("Diff failed: HTTP ${response.statusCode()}")
+        }
+
+        return response.body()
+    }
+
+    fun clearHeuristicMemory() {
+        val request = HttpRequest.newBuilder()
+            .uri(URI.create("$baseUrl/queryduck/memory/clear"))
+            .timeout(Duration.ofSeconds(2))
+            .POST(HttpRequest.BodyPublishers.noBody())
+            .build()
+
+        val response = http.send(request, HttpResponse.BodyHandlers.ofString())
+        if (response.statusCode() != 200) {
+            throw QueryDuckClientException("Clear memory failed: HTTP ${response.statusCode()}")
+        }
+    }
+
+    fun fetchHeuristicWorkload(provider: String? = null): String {
+        val uri = if (provider.isNullOrBlank()) {
+            "$baseUrl/queryduck/memory/workload"
+        } else {
+            "$baseUrl/queryduck/memory/workload?provider=$provider"
+        }
+        val request = HttpRequest.newBuilder()
+            .uri(URI.create(uri))
+            .timeout(Duration.ofSeconds(2))
+            .GET()
+            .build()
+
+        val response = http.send(request, HttpResponse.BodyHandlers.ofString())
+        if (response.statusCode() != 200) {
+            throw QueryDuckClientException("HTTP ${response.statusCode()}")
+        }
+
+        return response.body()
+    }
+
+    fun recordHeuristicFeedback(
+        provider: String,
+        sql: String,
+        category: String,
+        title: String,
+        action: String,
+    ) {
+        val payload = gson.toJson(
+            mapOf(
+                "provider" to provider,
+                "sql" to sql,
+                "category" to category,
+                "title" to title,
+                "action" to action,
+            ),
+        )
+        val request = HttpRequest.newBuilder()
+            .uri(URI.create("$baseUrl/queryduck/memory/feedback"))
+            .timeout(Duration.ofSeconds(2))
+            .header("Content-Type", "application/json")
+            .POST(HttpRequest.BodyPublishers.ofString(payload))
+            .build()
+
+        val response = http.send(request, HttpResponse.BodyHandlers.ofString())
+        if (response.statusCode() != 200) {
+            throw QueryDuckClientException("Feedback failed: HTTP ${response.statusCode()}")
+        }
+    }
+
+    fun fetchHeuristicMemoryStats(): QueryHeuristicMemoryStatsDto {
+        val request = HttpRequest.newBuilder()
+            .uri(URI.create("$baseUrl/queryduck/memory/stats"))
+            .timeout(Duration.ofSeconds(2))
+            .GET()
+            .build()
+
+        val response = http.send(request, HttpResponse.BodyHandlers.ofString())
+        if (response.statusCode() != 200) {
+            throw QueryDuckClientException("HTTP ${response.statusCode()}")
+        }
+
+        return gson.fromJson(response.body(), QueryHeuristicMemoryStatsDto::class.java)
+    }
 }
 
 class QueryDuckClientException(message: String) : Exception(message)

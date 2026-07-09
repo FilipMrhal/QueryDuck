@@ -88,6 +88,71 @@ public sealed class OracleDatabaseAdapter : IDatabaseAdapter
         return findings;
     }
 
+    public async Task<QueryHistoricalStatsInsight?> TryMatchHistoricalStatsAsync(
+        DbConnection connection,
+        string sql,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+        ArgumentException.ThrowIfNullOrWhiteSpace(sql);
+
+        try
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                SELECT sql_text,
+                       executions,
+                       elapsed_time / NULLIF(executions, 0) / 1000 AS mean_ms,
+                       elapsed_time / 1000 AS total_ms,
+                       rows_processed,
+                       buffer_gets,
+                       disk_reads
+                FROM (
+                    SELECT sql_text, executions, elapsed_time, rows_processed, buffer_gets, disk_reads
+                    FROM v$sql
+                    WHERE sql_text IS NOT NULL
+                    ORDER BY elapsed_time / NULLIF(executions, 0) DESC
+                    FETCH FIRST 200 ROWS ONLY
+                )
+                """;
+
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                var queryText = reader.GetString(0);
+                if (!QueryHistoricalStatsSqlMatcher.IsLikelyMatch(sql, queryText))
+                {
+                    continue;
+                }
+
+                var calls = reader.GetInt64(1);
+                var meanMs = reader.IsDBNull(2) ? 0 : Convert.ToDouble(reader.GetValue(2));
+                var totalMs = reader.IsDBNull(3) ? 0 : Convert.ToDouble(reader.GetValue(3));
+                var rows = reader.IsDBNull(4) ? 0 : reader.GetInt64(4);
+                var bufferGets = reader.IsDBNull(5) ? 0 : reader.GetInt64(5);
+                var diskReads = reader.IsDBNull(6) ? 0 : reader.GetInt64(6);
+                var ratio = bufferGets + diskReads == 0
+                    ? (double?)null
+                    : (bufferGets - diskReads) / (double)Math.Max(1, bufferGets);
+
+                return new QueryHistoricalStatsInsight(
+                    calls,
+                    meanMs,
+                    totalMs,
+                    rows,
+                    ratio,
+                    queryText,
+                    "V$SQL");
+            }
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+
+        return null;
+    }
+
     private static async Task<List<SchemaColumnInfo>> ReadColumnsAsync(
         DbConnection connection,
         CancellationToken cancellationToken)

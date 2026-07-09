@@ -98,13 +98,28 @@ public sealed class QueryCaptureEventDto
     public SlowQueryImprovementAnalysisDto? ImprovementAnalysis { get; set; }
 
     [JsonPropertyName("schemaVersion")]
-    public int SchemaVersion { get; set; } = 6;
+    public int SchemaVersion { get; set; } = 8;
 
     public bool Succeeded { get; set; } = true;
 
     public string? ErrorMessage { get; set; }
 
     public string? ExceptionType { get; set; }
+
+    [JsonPropertyName("traceId")]
+    public string? TraceId { get; set; }
+
+    [JsonPropertyName("spanId")]
+    public string? SpanId { get; set; }
+
+    [JsonPropertyName("correlationId")]
+    public string? CorrelationId { get; set; }
+
+    [JsonPropertyName("requestPath")]
+    public string? RequestPath { get; set; }
+
+    [JsonPropertyName("sourceLocation")]
+    public SourceLocationDto? SourceLocation { get; set; }
 
     public int WarningCount =>
         Diagnostics.Count(d =>
@@ -147,6 +162,30 @@ public sealed class QueryCaptureEventDto
 
         return Caller ?? "Unknown source";
     }
+}
+
+public sealed class QueryHistoricalStatsInsightDto
+{
+    [JsonPropertyName("calls")]
+    public long Calls { get; set; }
+
+    [JsonPropertyName("meanExecTimeMs")]
+    public double MeanExecTimeMs { get; set; }
+
+    [JsonPropertyName("totalExecTimeMs")]
+    public double TotalExecTimeMs { get; set; }
+
+    [JsonPropertyName("rows")]
+    public long Rows { get; set; }
+
+    [JsonPropertyName("cacheHitRatio")]
+    public double? CacheHitRatio { get; set; }
+
+    [JsonPropertyName("matchedQueryText")]
+    public string? MatchedQueryText { get; set; }
+
+    [JsonPropertyName("sourceView")]
+    public string? SourceView { get; set; }
 }
 
 public sealed class PgStatStatementInsightDto
@@ -232,6 +271,15 @@ public sealed class SlowQueryRecommendationDto
     [JsonPropertyName("planDiff")]
     public PlanDiffVisualizationDto? PlanDiff { get; set; }
 
+    [JsonPropertyName("heuristicScore")]
+    public double? HeuristicScore { get; set; }
+
+    [JsonPropertyName("heuristicHint")]
+    public string? HeuristicHint { get; set; }
+
+    [JsonPropertyName("suggestedMigrationSql")]
+    public string? SuggestedMigrationSql { get; set; }
+
     public string ListLabel => $"[{Category}] {Title}";
 }
 
@@ -254,6 +302,21 @@ public sealed class SlowQueryImprovementAnalysisDto
 
     [JsonPropertyName("pgStatStatements")]
     public PgStatStatementInsightDto? PgStatStatements { get; set; }
+
+    [JsonPropertyName("historicalStats")]
+    public QueryHistoricalStatsInsightDto? HistoricalStats { get; set; }
+}
+
+public sealed class SourceLocationDto
+{
+    [JsonPropertyName("filePath")]
+    public string FilePath { get; set; } = string.Empty;
+
+    [JsonPropertyName("line")]
+    public int Line { get; set; }
+
+    [JsonPropertyName("methodName")]
+    public string? MethodName { get; set; }
 }
 
 public sealed class HealthResponse
@@ -266,4 +329,22 @@ public sealed class HealthResponse
 
     [JsonPropertyName("sessionWarnings")]
     public List<string> SessionWarnings { get; set; } = new();
+}
+
+public sealed class QueryHeuristicMemoryStatsDto
+{
+    [JsonPropertyName("feedbackCount")]
+    public int FeedbackCount { get; set; }
+
+    [JsonPropertyName("distinctShapes")]
+    public int DistinctShapes { get; set; }
+
+    [JsonPropertyName("copiedCount")]
+    public int CopiedCount { get; set; }
+
+    [JsonPropertyName("dismissedCount")]
+    public int DismissedCount { get; set; }
+
+    [JsonPropertyName("storePath")]
+    public string StorePath { get; set; } = string.Empty;
 }

@@ -19,6 +19,20 @@ public sealed class QueryRuleRunner
         new DateTimeSemanticsRule(),
         new BooleanComparisonRule(),
         new UnorderedFirstRule(),
+        new IncludeWithoutSplitQueryRule(),
+        new TakeSkipWithoutOrderByRule(),
+        new NonTranslatablePatternRule(),
+        new StringContainsPatternRule(),
+        new MissingAsNoTrackingRule(),
+        new RawSqlLiteralRule(),
+        new ExecuteUpdateDeleteRule(),
+        new DynamicOrderByRule(),
+        new UnfilteredCountRule(),
+        new MultipleOrderByRule(),
+        new StringNormalizationRule(),
+        new DistinctWithoutProjectionRule(),
+        new GroupByWithoutAggregateRule(),
+        new IgnoreQueryFiltersRule(),
     ];
 
     private readonly IReadOnlyList<IQueryRule> _rules;

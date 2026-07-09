@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using QueryDuck.Core.Learning;
 
 namespace QueryDuck.Core.Capture;
 
@@ -155,10 +156,215 @@ public sealed class QueryDuckEventServer : IAsyncDisposable
                 return;
             }
 
+            if (path.Equals("/queryduck/schema/audit", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(context.Request.HttpMethod, "GET", StringComparison.OrdinalIgnoreCase))
+            {
+                var audit = QueryDuckSchemaAuditCache.Current;
+                if (audit is null)
+                {
+                    await WriteJsonAsync(context, new { status = "empty" }).ConfigureAwait(false);
+                }
+                else
+                {
+                    await WriteJsonAsync(context, audit).ConfigureAwait(false);
+                }
+                return;
+            }
+
+            if (path.Equals("/queryduck/session/baseline", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(context.Request.HttpMethod, "POST", StringComparison.OrdinalIgnoreCase))
+            {
+                var options = QueryDuckCaptureRuntime.CurrentOptions ?? new QueryCaptureOptions();
+                var snapshot = QueryDuckSessionSnapshot.Capture(QueryDuckCapture.LastCommands, options);
+                QueryDuckSessionComparer.SetBaseline(snapshot);
+                await WriteJsonAsync(context, snapshot).ConfigureAwait(false);
+                return;
+            }
+
+            if (path.Equals("/queryduck/session/compare", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(context.Request.HttpMethod, "GET", StringComparison.OrdinalIgnoreCase))
+            {
+                var options = QueryDuckCaptureRuntime.CurrentOptions ?? new QueryCaptureOptions();
+                var current = QueryDuckSessionSnapshot.Capture(QueryDuckCapture.LastCommands, options);
+                try
+                {
+                    var comparison = QueryDuckSessionComparer.Compare(current);
+                    await WriteJsonAsync(context, comparison).ConfigureAwait(false);
+                }
+                catch (InvalidOperationException ex)
+                {
+                    context.Response.StatusCode = 400;
+                    await WriteJsonAsync(context, new { error = ex.Message }).ConfigureAwait(false);
+                }
+
+                return;
+            }
+
             if (path.Equals("/queryduck/session/warnings", StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(context.Request.HttpMethod, "GET", StringComparison.OrdinalIgnoreCase))
             {
                 await WriteJsonAsync(context, QueryDuckSession.Warnings).ConfigureAwait(false);
+                return;
+            }
+
+            if (path.Equals("/queryduck/session/hotspots", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(context.Request.HttpMethod, "GET", StringComparison.OrdinalIgnoreCase))
+            {
+                await WriteJsonAsync(context, QueryDuckSessionHotspotsBuilder.Build(QueryDuckCapture.LastCommands))
+                    .ConfigureAwait(false);
+                return;
+            }
+
+            if (path.Equals("/queryduck/session/export", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(context.Request.HttpMethod, "GET", StringComparison.OrdinalIgnoreCase))
+            {
+                var options = QueryDuckCaptureRuntime.CurrentOptions ?? new QueryCaptureOptions();
+                await WriteTextAsync(
+                    context,
+                    QueryDuckSessionExportService.ExportJson(options),
+                    "application/json").ConfigureAwait(false);
+                return;
+            }
+
+            if (path.Equals("/queryduck/session/import", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(context.Request.HttpMethod, "POST", StringComparison.OrdinalIgnoreCase))
+            {
+                var body = await ReadBodyAsync(context.Request).ConfigureAwait(false);
+                if (body is null)
+                {
+                    context.Response.StatusCode = 413;
+                    await WriteJsonAsync(context, new { error = "payload too large" }).ConfigureAwait(false);
+                    return;
+                }
+
+                try
+                {
+                    var imported = QueryDuckSessionExportService.ImportJson(body);
+                    await WriteJsonAsync(context, new { imported }).ConfigureAwait(false);
+                }
+                catch (Exception)
+                {
+                    context.Response.StatusCode = 400;
+                    await WriteJsonAsync(context, new { error = "invalid session export payload" }).ConfigureAwait(false);
+                }
+
+                return;
+            }
+
+            if (path.Equals("/queryduck/session/timeline", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(context.Request.HttpMethod, "GET", StringComparison.OrdinalIgnoreCase))
+            {
+                await WriteJsonAsync(context, QueryDuckTransactionTimeline.Snapshot()).ConfigureAwait(false);
+                return;
+            }
+
+            if (path.Equals("/queryduck/session/traces", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(context.Request.HttpMethod, "GET", StringComparison.OrdinalIgnoreCase))
+            {
+                var options = QueryDuckCaptureRuntime.CurrentOptions ?? new QueryCaptureOptions();
+                await WriteJsonAsync(
+                    context,
+                    QueryDuckTraceGroupingBuilder.Build(QueryDuckCapture.LastCommands, options.SlowQueryThresholdMs))
+                    .ConfigureAwait(false);
+                return;
+            }
+
+            if (path.Equals("/queryduck/memory/feedback", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(context.Request.HttpMethod, "POST", StringComparison.OrdinalIgnoreCase))
+            {
+                if (context.Request.ContentLength64 > MaxRequestBodyBytes)
+                {
+                    context.Response.StatusCode = 413;
+                    await WriteJsonAsync(context, new { error = "payload too large" }).ConfigureAwait(false);
+                    return;
+                }
+
+                var body = await ReadBodyAsync(context.Request).ConfigureAwait(false);
+                if (body is null)
+                {
+                    context.Response.StatusCode = 413;
+                    await WriteJsonAsync(context, new { error = "payload too large" }).ConfigureAwait(false);
+                    return;
+                }
+
+                var feedback = JsonSerializer.Deserialize<QueryHeuristicMemoryFeedbackRequest>(body, SerializerOptions);
+                if (feedback is null ||
+                    string.IsNullOrWhiteSpace(feedback.Provider) ||
+                    string.IsNullOrWhiteSpace(feedback.Sql) ||
+                    string.IsNullOrWhiteSpace(feedback.Category) ||
+                    string.IsNullOrWhiteSpace(feedback.Title) ||
+                    string.IsNullOrWhiteSpace(feedback.Action) ||
+                    !Enum.TryParse<QueryHeuristicMemoryAction>(feedback.Action, ignoreCase: true, out var action))
+                {
+                    context.Response.StatusCode = 400;
+                    await WriteJsonAsync(context, new { error = "invalid feedback payload" }).ConfigureAwait(false);
+                    return;
+                }
+
+                QueryHeuristicMemory.RecordFeedback(
+                    feedback.Provider,
+                    feedback.Sql,
+                    feedback.Category,
+                    feedback.Title,
+                    action);
+                await WriteJsonAsync(context, new { ok = true }).ConfigureAwait(false);
+                return;
+            }
+
+            if (path.Equals("/queryduck/memory/stats", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(context.Request.HttpMethod, "GET", StringComparison.OrdinalIgnoreCase))
+            {
+                await WriteJsonAsync(context, QueryHeuristicMemory.GetStats()).ConfigureAwait(false);
+                return;
+            }
+
+            if (path.Equals("/queryduck/memory/clear", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(context.Request.HttpMethod, "POST", StringComparison.OrdinalIgnoreCase))
+            {
+                QueryHeuristicMemory.Clear();
+                await WriteJsonAsync(context, new { cleared = true }).ConfigureAwait(false);
+                return;
+            }
+
+            if (path.Equals("/queryduck/memory/workload", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(context.Request.HttpMethod, "GET", StringComparison.OrdinalIgnoreCase))
+            {
+                var provider = context.Request.QueryString["provider"];
+                await WriteJsonAsync(context, QueryHeuristicMemory.GetWorkloadStats(provider)).ConfigureAwait(false);
+                return;
+            }
+
+            if (path.Equals("/queryduck/events/diff", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(context.Request.HttpMethod, "POST", StringComparison.OrdinalIgnoreCase))
+            {
+                var body = await ReadBodyAsync(context.Request).ConfigureAwait(false);
+                if (body is null)
+                {
+                    context.Response.StatusCode = 413;
+                    await WriteJsonAsync(context, new { error = "payload too large" }).ConfigureAwait(false);
+                    return;
+                }
+
+                var request = JsonSerializer.Deserialize<QueryEventDiffRequest>(body, SerializerOptions);
+                if (request is null ||
+                    string.IsNullOrWhiteSpace(request.LeftEventId) ||
+                    string.IsNullOrWhiteSpace(request.RightEventId))
+                {
+                    context.Response.StatusCode = 400;
+                    await WriteJsonAsync(context, new { error = "leftEventId and rightEventId are required" }).ConfigureAwait(false);
+                    return;
+                }
+
+                var left = QueryDuckCapture.LastCommands.FirstOrDefault(e => e.EventId == request.LeftEventId);
+                var right = QueryDuckCapture.LastCommands.FirstOrDefault(e => e.EventId == request.RightEventId);
+                if (left is null || right is null)
+                {
+                    context.Response.StatusCode = 404;
+                    await WriteJsonAsync(context, new { error = "one or both events were not found" }).ConfigureAwait(false);
+                    return;
+                }
+
+                await WriteJsonAsync(context, QueryDuckEventDiffBuilder.Build(left, right)).ConfigureAwait(false);
                 return;
             }
 

@@ -20,6 +20,9 @@ public static class SchemaAuditHelper
 
         var nullability = new List<NullabilityMismatch>();
         var types = new List<TypeMismatch>();
+        var missingColumns = new List<MissingColumnFinding>();
+        var missingIndexes = new List<MissingIndexFinding>();
+        var foreignKeys = new List<ForeignKeyFinding>();
         var columnLookup = databaseColumns.ToDictionary(
             c => $"{c.TableName}.{c.ColumnName}",
             c => c,
@@ -36,6 +39,11 @@ public static class SchemaAuditHelper
                 var key = $"{tableName}.{columnName}";
                 if (!columnLookup.TryGetValue(key, out var column))
                 {
+                    missingColumns.Add(new MissingColumnFinding(
+                        entityType.ClrType.Name,
+                        property.Name,
+                        columnName,
+                        $"Model maps '{property.Name}' to column '{columnName}' on '{tableName}', but the column was not found in the database."));
                     continue;
                 }
 
@@ -62,9 +70,31 @@ public static class SchemaAuditHelper
                         $"Property '{property.Name}' type '{storeType}' may not match database type '{column.DataType}'."));
                 }
             }
+
+            foreach (var foreignKey in entityType.GetForeignKeys())
+            {
+                var principalTable = foreignKey.PrincipalEntityType.GetTableName() ?? foreignKey.PrincipalEntityType.ClrType.Name;
+                foreach (var property in foreignKey.Properties)
+                {
+                    var columnName = property.GetColumnName() ?? property.Name;
+                    foreignKeys.Add(new ForeignKeyFinding(
+                        tableName,
+                        columnName,
+                        principalTable,
+                        $"Foreign key '{tableName}.{columnName}' references '{principalTable}' — verify an index exists on the FK column for join performance."));
+
+                    if (!property.IsPrimaryKey())
+                    {
+                        missingIndexes.Add(new MissingIndexFinding(
+                            tableName,
+                            columnName,
+                            $"Consider an index on foreign key column '{tableName}.{columnName}'."));
+                    }
+                }
+            }
         }
 
-        return new SchemaAuditResult(nullability, types);
+        return new SchemaAuditResult(nullability, types, missingColumns, missingIndexes, foreignKeys);
     }
 
     public static string ComputePlanHash(string planText)

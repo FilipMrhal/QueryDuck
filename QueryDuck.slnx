@@ -7,6 +7,7 @@
     <Project Path="src/QueryDuck.Client/QueryDuck.Client.csproj" />
     <Project Path="src/QueryDuck.Core/QueryDuck.Core.csproj" />
     <Project Path="src/QueryDuck.EntityFrameworkExtensions/QueryDuck.EntityFrameworkExtensions.csproj" />
+    <Project Path="src/QueryDuck.OpenTelemetry/QueryDuck.OpenTelemetry.csproj" />
     <Project Path="src/QueryDuck.Serilog/QueryDuck.Serilog.csproj" />
     <Project Path="src/QueryDuck.Testing/QueryDuck.Testing.csproj" />
   </Folder>

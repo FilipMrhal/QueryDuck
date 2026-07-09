@@ -46,13 +46,15 @@ public static class QueryCaptureEventFactory
         SlowQueryImprovementAnalysisDto? improvementAnalysis = null,
         bool succeeded = true,
         string? errorMessage = null,
-        string? exceptionType = null)
+        string? exceptionType = null,
+        SourceLocation? sourceLocation = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sql);
         var pending = QueryDuckCaptureScope.TakePending();
         var diagnostics = pending?.Diagnostics
             .Select(d => new QueryDiagnosticDto(d.RuleId, d.Severity.ToString(), d.Message, d.FixHint))
             .ToArray() ?? [];
+        var correlation = QueryCaptureCorrelation.ReadCurrent();
 
         return new QueryCaptureEvent
         {
@@ -77,6 +79,12 @@ public static class QueryCaptureEventFactory
             Succeeded = succeeded,
             ErrorMessage = errorMessage,
             ExceptionType = exceptionType,
+            TraceId = correlation.TraceId,
+            SpanId = correlation.SpanId,
+            CorrelationId = correlation.CorrelationId,
+            RequestPath = correlation.RequestPath,
+            SourceLocation = sourceLocation,
+            SchemaVersion = 8,
         };
     }
 
