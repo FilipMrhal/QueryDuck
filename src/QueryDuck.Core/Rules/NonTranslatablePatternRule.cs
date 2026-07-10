@@ -1,5 +1,5 @@
-using QueryDuck.Core.Diagnostics;
 using System.Linq.Expressions;
+using QueryDuck.Core.Diagnostics;
 
 namespace QueryDuck.Core.Rules;
 
