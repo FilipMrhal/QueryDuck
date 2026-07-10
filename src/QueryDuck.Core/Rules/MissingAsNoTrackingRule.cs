@@ -9,20 +9,12 @@ internal sealed class MissingAsNoTrackingRule : QueryRuleBase
     public override string Id => "QD015";
 
     public override IEnumerable<QueryDiagnostic> Analyze(QueryRuleContext context) =>
-        TrackingVisitor.Analyze(context.Expression);
+        TrackingVisitor.Run(() => new TrackingVisitor(Id), context.Expression);
 
-    private sealed class TrackingVisitor : ExpressionVisitor
+    private sealed class TrackingVisitor(string ruleId) : DiagnosticRuleVisitor(ruleId)
     {
-        private readonly List<QueryDiagnostic> _diagnostics = [];
         private bool _hasAsNoTracking;
         private bool _hasAsNoTrackingWithIdentityResolution;
-
-        public static IEnumerable<QueryDiagnostic> Analyze(Expression expression)
-        {
-            var visitor = new TrackingVisitor();
-            visitor.Visit(expression);
-            return visitor._diagnostics;
-        }
 
         protected override Expression VisitMethodCall(MethodCallExpression node)
         {
@@ -43,25 +35,26 @@ internal sealed class MissingAsNoTrackingRule : QueryRuleBase
                 !_hasAsNoTracking &&
                 !_hasAsNoTrackingWithIdentityResolution)
             {
-                _diagnostics.Add(new QueryDiagnostic(
-                    "QD015",
-                    QueryDiagnosticSeverity.Info,
+                Info(
                     "Read-only projection query without AsNoTracking — EF tracks entities unnecessarily.",
-                    "Add .AsNoTracking() (or AsNoTrackingWithIdentityResolution) for read-only queries."));
+                    "Add .AsNoTracking() (or AsNoTrackingWithIdentityResolution) for read-only queries.");
             }
 
             return base.VisitMethodCall(node);
         }
 
-        private static bool IsReadOnlyProjection(MethodCallExpression node)
-        {
-            if (node.Method.DeclaringType != typeof(Queryable))
-            {
-                return false;
-            }
-
-            return node.Method.Name is "Select" or "ToList" or "ToArray" or "First" or "FirstOrDefault"
-                or "Single" or "SingleOrDefault" or "Any" or "Count" or "LongCount";
-        }
+        private static bool IsReadOnlyProjection(MethodCallExpression node) =>
+            QueryableExpressionHelpers.IsQueryableMethod(
+                node,
+                "Select",
+                "ToList",
+                "ToArray",
+                "First",
+                "FirstOrDefault",
+                "Single",
+                "SingleOrDefault",
+                "Any",
+                "Count",
+                "LongCount");
     }
 }

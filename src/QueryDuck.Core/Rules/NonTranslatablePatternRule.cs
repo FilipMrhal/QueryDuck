@@ -1,5 +1,5 @@
-using System.Linq.Expressions;
 using QueryDuck.Core.Diagnostics;
+using System.Linq.Expressions;
 
 namespace QueryDuck.Core.Rules;
 
@@ -8,39 +8,27 @@ internal sealed class NonTranslatablePatternRule : QueryRuleBase
     public override string Id => "QD012";
 
     public override IEnumerable<QueryDiagnostic> Analyze(QueryRuleContext context) =>
-        TranslatabilityVisitor.Analyze(context.Expression);
+        TranslatabilityVisitor.Run(() => new TranslatabilityVisitor(Id), context.Expression);
 
-    private sealed class TranslatabilityVisitor : ExpressionVisitor
+    private sealed class TranslatabilityVisitor(string ruleId) : DiagnosticRuleVisitor(ruleId)
     {
-        private readonly List<QueryDiagnostic> _diagnostics = [];
         private int _lambdaDepth;
-
-        public static IEnumerable<QueryDiagnostic> Analyze(Expression expression)
-        {
-            var visitor = new TranslatabilityVisitor();
-            visitor.Visit(expression);
-            return visitor._diagnostics;
-        }
 
         protected override Expression VisitMethodCall(MethodCallExpression node)
         {
             if (node.Method.Name == "AsEnumerable" &&
                 node.Method.DeclaringType == typeof(Enumerable))
             {
-                _diagnostics.Add(new QueryDiagnostic(
-                    "QD012",
-                    QueryDiagnosticSeverity.Error,
+                Error(
                     "AsEnumerable() forces client evaluation — remaining predicates may not translate to SQL.",
-                    "Keep filtering in IQueryable until after ToListAsync(), or project in SQL first."));
+                    "Keep filtering in IQueryable until after ToListAsync(), or project in SQL first.");
             }
 
             if (node.Method.Name == "Compile" && node.Method.DeclaringType == typeof(Expression))
             {
-                _diagnostics.Add(new QueryDiagnostic(
-                    "QD012",
-                    QueryDiagnosticSeverity.Error,
+                Error(
                     "Expression.Compile() inside a query cannot be translated to SQL.",
-                    "Evaluate compiled delegates outside the LINQ expression tree."));
+                    "Evaluate compiled delegates outside the LINQ expression tree.");
             }
 
             return base.VisitMethodCall(node);
@@ -58,11 +46,9 @@ internal sealed class NonTranslatablePatternRule : QueryRuleBase
         {
             if (_lambdaDepth > 0)
             {
-                _diagnostics.Add(new QueryDiagnostic(
-                    "QD012",
-                    QueryDiagnosticSeverity.Warning,
+                Warn(
                     "Invoking a local function/delegate inside a LINQ predicate may not translate to SQL.",
-                    "Inline the logic or filter in memory after materializing the query."));
+                    "Inline the logic or filter in memory after materializing the query.");
             }
 
             return base.VisitInvocation(node);

@@ -14,7 +14,7 @@ public sealed class QueryDuckEventClient : IDisposable
     private readonly HttpClient _httpClient;
     private readonly bool _ownsClient;
 
-    public QueryDuckEventClient(string baseUrl = "http://127.0.0.1:17654", HttpClient? httpClient = null)
+    public QueryDuckEventClient(string baseUrl = QueryDuckClientDefaults.BaseUrl, HttpClient? httpClient = null)
     {
         BaseUrl = baseUrl.TrimEnd('/');
         if (httpClient is null)
@@ -32,7 +32,7 @@ public sealed class QueryDuckEventClient : IDisposable
 
     public async Task<IReadOnlyList<QueryCaptureEventDto>> FetchEventsAsync(CancellationToken cancellationToken = default)
     {
-        using var response = await _httpClient.GetAsync($"{BaseUrl}/queryduck/events", cancellationToken)
+        using var response = await _httpClient.GetAsync($"{BaseUrl}{QueryDuckClientRoutes.Events}", cancellationToken)
             .ConfigureAwait(false);
         await EnsureSuccessAsync(response).ConfigureAwait(false);
         var json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
@@ -42,7 +42,7 @@ public sealed class QueryDuckEventClient : IDisposable
 
     public async Task<HealthResponse> FetchHealthAsync(CancellationToken cancellationToken = default)
     {
-        using var response = await _httpClient.GetAsync($"{BaseUrl}/queryduck/health", cancellationToken)
+        using var response = await _httpClient.GetAsync($"{BaseUrl}{QueryDuckClientRoutes.Health}", cancellationToken)
             .ConfigureAwait(false);
         await EnsureSuccessAsync(response).ConfigureAwait(false);
         var json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
@@ -52,14 +52,14 @@ public sealed class QueryDuckEventClient : IDisposable
 
     public async Task ClearEventsAsync(CancellationToken cancellationToken = default)
     {
-        using var response = await _httpClient.PostAsync($"{BaseUrl}/queryduck/events/clear", null, cancellationToken)
+        using var response = await _httpClient.PostAsync($"{BaseUrl}{QueryDuckClientRoutes.EventsClear}", null, cancellationToken)
             .ConfigureAwait(false);
         await EnsureSuccessAsync(response).ConfigureAwait(false);
     }
 
     public async Task<JsonElement> FetchSchemaAuditAsync(CancellationToken cancellationToken = default)
     {
-        using var response = await _httpClient.GetAsync($"{BaseUrl}/queryduck/schema/audit", cancellationToken)
+        using var response = await _httpClient.GetAsync($"{BaseUrl}{QueryDuckClientRoutes.SchemaAudit}", cancellationToken)
             .ConfigureAwait(false);
         await EnsureSuccessAsync(response).ConfigureAwait(false);
         var json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
@@ -68,7 +68,7 @@ public sealed class QueryDuckEventClient : IDisposable
 
     public async Task<QueryDuckSessionSnapshotDto> SetSessionBaselineAsync(CancellationToken cancellationToken = default)
     {
-        using var response = await _httpClient.PostAsync($"{BaseUrl}/queryduck/session/baseline", null, cancellationToken)
+        using var response = await _httpClient.PostAsync($"{BaseUrl}{QueryDuckClientRoutes.SessionBaseline}", null, cancellationToken)
             .ConfigureAwait(false);
         await EnsureSuccessAsync(response).ConfigureAwait(false);
         var json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
@@ -78,7 +78,7 @@ public sealed class QueryDuckEventClient : IDisposable
 
     public async Task<QueryDuckSessionComparisonDto> CompareSessionAsync(CancellationToken cancellationToken = default)
     {
-        using var response = await _httpClient.GetAsync($"{BaseUrl}/queryduck/session/compare", cancellationToken)
+        using var response = await _httpClient.GetAsync($"{BaseUrl}{QueryDuckClientRoutes.SessionCompare}", cancellationToken)
             .ConfigureAwait(false);
         await EnsureSuccessAsync(response).ConfigureAwait(false);
         var json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
@@ -103,7 +103,7 @@ public sealed class QueryDuckEventClient : IDisposable
             action,
         }, SerializerOptions);
         using var content = new StringContent(payload, Encoding.UTF8, "application/json");
-        using var response = await _httpClient.PostAsync($"{BaseUrl}/queryduck/memory/feedback", content, cancellationToken)
+        using var response = await _httpClient.PostAsync($"{BaseUrl}{QueryDuckClientRoutes.MemoryFeedback}", content, cancellationToken)
             .ConfigureAwait(false);
         await EnsureSuccessAsync(response).ConfigureAwait(false);
     }
@@ -111,7 +111,7 @@ public sealed class QueryDuckEventClient : IDisposable
     public async Task<QueryHeuristicMemoryStatsDto> FetchHeuristicMemoryStatsAsync(
         CancellationToken cancellationToken = default)
     {
-        using var response = await _httpClient.GetAsync($"{BaseUrl}/queryduck/memory/stats", cancellationToken)
+        using var response = await _httpClient.GetAsync($"{BaseUrl}{QueryDuckClientRoutes.MemoryStats}", cancellationToken)
             .ConfigureAwait(false);
         await EnsureSuccessAsync(response).ConfigureAwait(false);
         var json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
@@ -121,14 +121,14 @@ public sealed class QueryDuckEventClient : IDisposable
 
     public async Task ClearHeuristicMemoryAsync(CancellationToken cancellationToken = default)
     {
-        using var response = await _httpClient.PostAsync($"{BaseUrl}/queryduck/memory/clear", null, cancellationToken)
+        using var response = await _httpClient.PostAsync($"{BaseUrl}{QueryDuckClientRoutes.MemoryClear}", null, cancellationToken)
             .ConfigureAwait(false);
         await EnsureSuccessAsync(response).ConfigureAwait(false);
     }
 
     public async Task<string> ExportSessionAsync(CancellationToken cancellationToken = default)
     {
-        using var response = await _httpClient.GetAsync($"{BaseUrl}/queryduck/session/export", cancellationToken)
+        using var response = await _httpClient.GetAsync($"{BaseUrl}{QueryDuckClientRoutes.SessionExport}", cancellationToken)
             .ConfigureAwait(false);
         await EnsureSuccessAsync(response).ConfigureAwait(false);
         return await response.Content.ReadAsStringAsync().ConfigureAwait(false);
@@ -137,7 +137,7 @@ public sealed class QueryDuckEventClient : IDisposable
     public async Task<int> ImportSessionAsync(string json, CancellationToken cancellationToken = default)
     {
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
-        using var response = await _httpClient.PostAsync($"{BaseUrl}/queryduck/session/import", content, cancellationToken)
+        using var response = await _httpClient.PostAsync($"{BaseUrl}{QueryDuckClientRoutes.SessionImport}", content, cancellationToken)
             .ConfigureAwait(false);
         await EnsureSuccessAsync(response).ConfigureAwait(false);
         var body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
@@ -147,7 +147,7 @@ public sealed class QueryDuckEventClient : IDisposable
 
     public async Task<JsonElement> FetchSessionHotspotsAsync(CancellationToken cancellationToken = default)
     {
-        using var response = await _httpClient.GetAsync($"{BaseUrl}/queryduck/session/hotspots", cancellationToken)
+        using var response = await _httpClient.GetAsync($"{BaseUrl}{QueryDuckClientRoutes.SessionHotspots}", cancellationToken)
             .ConfigureAwait(false);
         await EnsureSuccessAsync(response).ConfigureAwait(false);
         var json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
@@ -158,7 +158,7 @@ public sealed class QueryDuckEventClient : IDisposable
     {
         var payload = JsonSerializer.Serialize(new { leftEventId, rightEventId }, SerializerOptions);
         using var content = new StringContent(payload, Encoding.UTF8, "application/json");
-        using var response = await _httpClient.PostAsync($"{BaseUrl}/queryduck/events/diff", content, cancellationToken)
+        using var response = await _httpClient.PostAsync($"{BaseUrl}{QueryDuckClientRoutes.EventsDiff}", content, cancellationToken)
             .ConfigureAwait(false);
         await EnsureSuccessAsync(response).ConfigureAwait(false);
         var json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);

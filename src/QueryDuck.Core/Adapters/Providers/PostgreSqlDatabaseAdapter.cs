@@ -17,7 +17,7 @@ public sealed class PostgreSqlDatabaseAdapter : IDatabaseAdapter
         ArgumentNullException.ThrowIfNull(model);
         ArgumentNullException.ThrowIfNull(connection);
         var columns = await ReadColumnsAsync(connection, cancellationToken).ConfigureAwait(false);
-        return SchemaAuditHelper.Compare(model, columns, defaultSchema: "public");
+        return SchemaAuditHelper.Compare(model, columns, defaultSchema: ProviderSchemaHelper.DefaultSchema(Provider));
     }
 
     public async Task<ExecutionPlanResult> GetExecutionPlanAsync(
@@ -36,39 +36,23 @@ public sealed class PostgreSqlDatabaseAdapter : IDatabaseAdapter
 
     public async Task<IReadOnlyList<StatementCacheFinding>> GetStatementCacheDiagnosticsAsync(
         DbConnection connection,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(connection);
-        var findings = new List<StatementCacheFinding>();
-
-        try
-        {
-            await using var command = connection.CreateCommand();
-            command.CommandText = """
-                SELECT queryid::text, COUNT(*) AS variant_count
-                FROM pg_stat_statements
-                GROUP BY queryid
-                HAVING COUNT(*) > 5
-                ORDER BY COUNT(*) DESC
-                LIMIT 20
-                """;
-
-            await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
-            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
-            {
-                findings.Add(new StatementCacheFinding(
-                    reader.GetString(0),
-                    reader.GetInt32(1),
-                    $"PostgreSQL plan cache: {reader.GetInt32(1)} variants for query id {reader.GetString(0)}."));
-            }
-        }
-        catch (Exception ex)
-        {
-            findings.Add(new StatementCacheFinding("unsupported", 0, $"pg_stat_statements unavailable: {ex.Message}"));
-        }
-
-        return findings;
-    }
+        CancellationToken cancellationToken = default) =>
+        await StatementCacheDiagnosticsHelper.QueryAsync(
+            connection,
+            $"""
+            SELECT queryid::text, COUNT(*) AS variant_count
+            FROM pg_stat_statements
+            GROUP BY queryid
+            HAVING COUNT(*) > {DiagnosticsLimits.StatementCacheVariantThreshold}
+            ORDER BY COUNT(*) DESC
+            LIMIT {DiagnosticsLimits.StatementCacheResultLimit}
+            """,
+            reader => new StatementCacheFinding(
+                reader.GetString(0),
+                reader.GetInt32(1),
+                $"PostgreSQL plan cache: {reader.GetInt32(1)} variants for query id {reader.GetString(0)}."),
+            ex => $"pg_stat_statements unavailable: {ex.Message}",
+            cancellationToken).ConfigureAwait(false);
 
     public async Task<PgStatStatementInsight?> TryMatchPgStatStatementAsync(
         DbConnection connection,
@@ -76,75 +60,30 @@ public sealed class PostgreSqlDatabaseAdapter : IDatabaseAdapter
         CancellationToken cancellationToken = default)
     {
         var insight = await TryMatchHistoricalStatsAsync(connection, sql, cancellationToken).ConfigureAwait(false);
-        return insight is null
-            ? null
-            : new PgStatStatementInsight(
-                insight.Calls,
-                insight.MeanExecTimeMs,
-                insight.TotalExecTimeMs,
-                insight.Rows,
-                insight.CacheHitRatio ?? 0,
-                insight.MatchedQueryText);
+        return insight is null ? null : PgStatStatementInsight.FromHistoricalStats(insight);
     }
 
-    public async Task<QueryHistoricalStatsInsight?> TryMatchHistoricalStatsAsync(
+    public Task<QueryHistoricalStatsInsight?> TryMatchHistoricalStatsAsync(
         DbConnection connection,
         string sql,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(connection);
-        ArgumentException.ThrowIfNullOrWhiteSpace(sql);
-
-        try
-        {
-            await using var command = connection.CreateCommand();
-            command.CommandText = """
-                SELECT query,
-                       calls,
-                       mean_exec_time,
-                       total_exec_time,
-                       rows,
-                       shared_blks_hit,
-                       shared_blks_read
-                FROM pg_stat_statements
-                ORDER BY mean_exec_time DESC
-                LIMIT 200
-                """;
-
-            await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
-            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
-            {
-                var queryText = reader.GetString(0);
-                if (!QueryHistoricalStatsSqlMatcher.IsLikelyMatch(sql, queryText))
-                {
-                    continue;
-                }
-
-                var calls = reader.GetInt64(1);
-                var meanMs = reader.GetDouble(2);
-                var totalMs = reader.GetDouble(3);
-                var rows = reader.GetInt64(4);
-                var hit = reader.GetInt64(5);
-                var read = reader.GetInt64(6);
-                var ratio = hit + read == 0 ? 1.0 : hit / (double)(hit + read);
-
-                return new QueryHistoricalStatsInsight(
-                    calls,
-                    meanMs,
-                    totalMs,
-                    rows,
-                    ratio,
-                    queryText,
-                    "pg_stat_statements");
-            }
-        }
-        catch (Exception)
-        {
-            return null;
-        }
-
-        return null;
-    }
+        CancellationToken cancellationToken = default) =>
+        HistoricalStatsQueryHelper.TryMatchAsync(
+            connection,
+            sql,
+            $"""
+            SELECT query,
+                   calls,
+                   mean_exec_time,
+                   total_exec_time,
+                   rows,
+                   shared_blks_hit,
+                   shared_blks_read
+            FROM pg_stat_statements
+            ORDER BY mean_exec_time DESC
+            LIMIT {DiagnosticsLimits.HistoricalStatsSampleSize}
+            """,
+            MapHistoricalStatsRow,
+            cancellationToken);
 
     public async Task<IReadOnlyList<ColumnStatistics>> GetColumnStatisticsAsync(
         DbConnection connection,
@@ -204,31 +143,41 @@ public sealed class PostgreSqlDatabaseAdapter : IDatabaseAdapter
         return statistics;
     }
 
-    private static async Task<List<SchemaColumnInfo>> ReadColumnsAsync(DbConnection connection, CancellationToken cancellationToken)
-    {
-        var columns = new List<SchemaColumnInfo>();
-        await using var command = connection.CreateCommand();
-        command.CommandText = """
+    private static Task<List<SchemaColumnInfo>> ReadColumnsAsync(DbConnection connection, CancellationToken cancellationToken) =>
+        SchemaColumnReader.QueryAsync(
+            connection,
+            """
             SELECT table_name, column_name, data_type, is_nullable, character_maximum_length, numeric_precision, numeric_scale
             FROM information_schema.columns
             WHERE table_schema = 'public'
-            """;
+            """,
+            reader => SchemaColumnReader.MapStringNullableRow(reader),
+            cancellationToken);
 
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
-        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
-        {
-            columns.Add(new SchemaColumnInfo(
-                reader.GetString(0),
-                reader.GetString(1),
-                reader.GetString(2),
-                reader.GetString(3).Equals("YES", StringComparison.OrdinalIgnoreCase),
-                reader.IsDBNull(4) ? null : Convert.ToInt32(reader.GetValue(4)),
-                reader.IsDBNull(5) ? null : Convert.ToInt32(reader.GetValue(5)),
-                reader.IsDBNull(6) ? null : Convert.ToInt32(reader.GetValue(6))));
-        }
+    private static QueryHistoricalStatsInsight? MapHistoricalStatsRow(DbDataReader reader, string sql) =>
+        HistoricalStatsRowMapper.TryMap(
+            reader,
+            sql,
+            r => r.GetString(0),
+            (r, queryText) =>
+            {
+                var calls = r.GetInt64(1);
+                var meanMs = r.GetDouble(2);
+                var totalMs = r.GetDouble(3);
+                var rows = r.GetInt64(4);
+                var hit = r.GetInt64(5);
+                var read = r.GetInt64(6);
+                var ratio = hit + read == 0 ? 1.0 : hit / (double)(hit + read);
 
-        return columns;
-    }
+                return new QueryHistoricalStatsInsight(
+                    calls,
+                    meanMs,
+                    totalMs,
+                    rows,
+                    ratio,
+                    queryText,
+                    "pg_stat_statements");
+            });
 }
 
 public static class PostgreSqlQueryDuckExtensions

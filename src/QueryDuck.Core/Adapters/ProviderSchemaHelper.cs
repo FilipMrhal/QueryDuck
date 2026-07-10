@@ -1,3 +1,4 @@
+using System.Data.Common;
 using QueryDuck.Core.Providers;
 
 namespace QueryDuck.Core.Adapters;
@@ -14,6 +15,17 @@ internal static class ProviderSchemaHelper
             DatabaseProvider.Sqlite => "main",
             _ => "public",
         };
+
+    public static string DefaultSchemaForAudit(DatabaseProvider provider, DbConnection connection)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+        return provider switch
+        {
+            DatabaseProvider.MySql => connection.Database,
+            DatabaseProvider.Oracle => connection.Database.ToUpperInvariant(),
+            _ => DefaultSchema(provider),
+        };
+    }
 
     public static (string Schema, string Table) ResolveTableReference(string tableReference, DatabaseProvider provider)
     {

@@ -8,29 +8,18 @@ internal sealed class DynamicOrderByRule : QueryRuleBase
     public override string Id => "QD018";
 
     public override IEnumerable<QueryDiagnostic> Analyze(QueryRuleContext context) =>
-        DynamicOrderVisitor.Analyze(context.Expression);
+        DynamicOrderVisitor.Run(() => new DynamicOrderVisitor(Id), context.Expression);
 
-    private sealed class DynamicOrderVisitor : ExpressionVisitor
+    private sealed class DynamicOrderVisitor(string ruleId) : DiagnosticRuleVisitor(ruleId)
     {
-        private readonly List<QueryDiagnostic> _diagnostics = [];
-
-        public static IEnumerable<QueryDiagnostic> Analyze(Expression expression)
-        {
-            var visitor = new DynamicOrderVisitor();
-            visitor.Visit(expression);
-            return visitor._diagnostics;
-        }
-
         protected override Expression VisitMethodCall(MethodCallExpression node)
         {
             if (TryGetOrderByLambda(node) is { Body: var keySelector } &&
                 UsesRuntimeKey(keySelector))
             {
-                _diagnostics.Add(new QueryDiagnostic(
-                    "QD018",
-                    QueryDiagnosticSeverity.Warning,
+                Warn(
                     "Dynamic OrderBy key may prevent index use and can be unstable across providers.",
-                    "Prefer a fixed OrderBy column, or sort in memory after materialization when keys are runtime-driven."));
+                    "Prefer a fixed OrderBy column, or sort in memory after materialization when keys are runtime-driven.");
             }
 
             return base.VisitMethodCall(node);
@@ -38,8 +27,7 @@ internal sealed class DynamicOrderByRule : QueryRuleBase
 
         private static LambdaExpression? TryGetOrderByLambda(MethodCallExpression node)
         {
-            if (node.Method.DeclaringType != typeof(Queryable) ||
-                node.Method.Name is not ("OrderBy" or "OrderByDescending"))
+            if (!QueryableExpressionHelpers.IsQueryableMethod(node, "OrderBy", "OrderByDescending"))
             {
                 return null;
             }

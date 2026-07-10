@@ -67,6 +67,7 @@ public sealed class AnalyzerRuleTests
         var syntaxTree = CSharpSyntaxTree.ParseText(source);
         var references = AppDomain.CurrentDomain.GetAssemblies()
             .Where(assembly => !assembly.IsDynamic && !string.IsNullOrWhiteSpace(assembly.Location))
+            .Where(assembly => !IsExcludedAnalyzerReference(assembly))
             .Select(assembly => MetadataReference.CreateFromFile(assembly.Location))
             .Cast<MetadataReference>()
             .ToList();
@@ -81,5 +82,13 @@ public sealed class AnalyzerRuleTests
         var compilationWithAnalyzers = compilation.WithAnalyzers(
             ImmutableArray.Create<DiagnosticAnalyzer>(analyzer));
         return compilationWithAnalyzers.GetAnalyzerDiagnosticsAsync().GetAwaiter().GetResult();
+    }
+
+    private static bool IsExcludedAnalyzerReference(System.Reflection.Assembly assembly)
+    {
+        var name = assembly.GetName().Name ?? string.Empty;
+        return name.StartsWith("QueryDuck", StringComparison.Ordinal)
+            || name.StartsWith("Microsoft.EntityFrameworkCore", StringComparison.Ordinal)
+            || name.StartsWith("Microsoft.Data", StringComparison.Ordinal);
     }
 }

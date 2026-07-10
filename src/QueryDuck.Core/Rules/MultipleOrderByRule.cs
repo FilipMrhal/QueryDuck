@@ -1,5 +1,5 @@
-using System.Linq.Expressions;
 using QueryDuck.Core.Diagnostics;
+using System.Linq.Expressions;
 
 namespace QueryDuck.Core.Rules;
 
@@ -8,33 +8,22 @@ internal sealed class MultipleOrderByRule : QueryRuleBase
     public override string Id => "QD020";
 
     public override IEnumerable<QueryDiagnostic> Analyze(QueryRuleContext context) =>
-        MultipleOrderVisitor.Analyze(context.Expression);
+        MultipleOrderVisitor.Run(() => new MultipleOrderVisitor(Id), context.Expression);
 
-    private sealed class MultipleOrderVisitor : ExpressionVisitor
+    private sealed class MultipleOrderVisitor(string ruleId) : DiagnosticRuleVisitor(ruleId)
     {
-        private readonly List<QueryDiagnostic> _diagnostics = [];
         private int _orderByCount;
-
-        public static IEnumerable<QueryDiagnostic> Analyze(Expression expression)
-        {
-            var visitor = new MultipleOrderVisitor();
-            visitor.Visit(expression);
-            return visitor._diagnostics;
-        }
 
         protected override Expression VisitMethodCall(MethodCallExpression node)
         {
-            if (node.Method.DeclaringType == typeof(Queryable) &&
-                node.Method.Name is "OrderBy" or "OrderByDescending")
+            if (QueryableExpressionHelpers.IsQueryableMethod(node, "OrderBy", "OrderByDescending"))
             {
                 _orderByCount++;
                 if (_orderByCount > 1)
                 {
-                    _diagnostics.Add(new QueryDiagnostic(
-                        "QD020",
-                        QueryDiagnosticSeverity.Warning,
+                    Warn(
                         "Multiple OrderBy calls — only the last ordering is effective unless ThenBy is used.",
-                        "Replace subsequent OrderBy calls with ThenBy / ThenByDescending."));
+                        "Replace subsequent OrderBy calls with ThenBy / ThenByDescending.");
                 }
             }
 

@@ -94,6 +94,19 @@ public sealed class QueryDuckDiagnosticAnalyzer : DiagnosticAnalyzer
                 NonNullableAggregateRule,
                 invocation.GetLocation(),
                 symbol.Name));
+            return;
+        }
+
+        var reduced = symbol.ReducedFrom ?? symbol;
+        if (reduced.ContainingType?.Name == "Queryable" &&
+            reduced.Name is "Sum" or "Max" or "Min" or "Average" &&
+            reduced.ReturnType.IsValueType &&
+            reduced.ReturnType.NullableAnnotation != NullableAnnotation.Annotated)
+        {
+            context.ReportDiagnostic(Diagnostic.Create(
+                NonNullableAggregateRule,
+                invocation.GetLocation(),
+                reduced.Name));
         }
     }
 

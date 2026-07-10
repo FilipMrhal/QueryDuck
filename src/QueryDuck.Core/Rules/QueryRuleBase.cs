@@ -13,6 +13,24 @@ internal abstract class QueryRuleBase : IQueryRule
 
     public abstract IEnumerable<QueryDiagnostic> Analyze(QueryRuleContext context);
 
+    protected QueryDiagnostic Warning(string message, string? fixHint = null) =>
+        CreateWarning(Id, message, fixHint);
+
+    protected QueryDiagnostic Info(string message, string? fixHint = null) =>
+        CreateInfo(Id, message, fixHint);
+
+    protected QueryDiagnostic Error(string message, string? fixHint = null) =>
+        CreateError(Id, message, fixHint);
+
+    internal static QueryDiagnostic CreateWarning(string ruleId, string message, string? fixHint = null) =>
+        new(ruleId, QueryDiagnosticSeverity.Warning, message, fixHint);
+
+    internal static QueryDiagnostic CreateInfo(string ruleId, string message, string? fixHint = null) =>
+        new(ruleId, QueryDiagnosticSeverity.Info, message, fixHint);
+
+    internal static QueryDiagnostic CreateError(string ruleId, string message, string? fixHint = null) =>
+        new(ruleId, QueryDiagnosticSeverity.Error, message, fixHint);
+
     protected static bool IsNullConstant(Expression expression) =>
         expression is ConstantExpression { Value: null };
 

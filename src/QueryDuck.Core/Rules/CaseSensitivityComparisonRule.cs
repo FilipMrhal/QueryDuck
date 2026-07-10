@@ -12,29 +12,18 @@ internal sealed class CaseSensitivityComparisonRule : QueryRuleBase
         [DatabaseProvider.SqlServer, DatabaseProvider.MySql];
 
     public override IEnumerable<QueryDiagnostic> Analyze(QueryRuleContext context) =>
-        CaseSensitivityVisitor.Analyze(context.Expression);
+        CaseSensitivityVisitor.Run(() => new CaseSensitivityVisitor(Id), context.Expression);
 
-    private sealed class CaseSensitivityVisitor : ExpressionVisitor
+    private sealed class CaseSensitivityVisitor(string ruleId) : DiagnosticRuleVisitor(ruleId)
     {
-        private readonly List<QueryDiagnostic> _diagnostics = [];
-
-        public static IEnumerable<QueryDiagnostic> Analyze(Expression expression)
-        {
-            var visitor = new CaseSensitivityVisitor();
-            visitor.Visit(expression);
-            return visitor._diagnostics;
-        }
-
         protected override Expression VisitMethodCall(MethodCallExpression node)
         {
             if (node.Method.Name is "Equals" or "Compare" &&
                 node.Method.DeclaringType == typeof(string))
             {
-                _diagnostics.Add(new QueryDiagnostic(
-                    "QD005",
-                    QueryDiagnosticSeverity.Info,
+                Info(
                     "String comparison on SQL Server/MySQL may use case-insensitive collation by default.",
-                    "Verify collation matches PostgreSQL/Oracle case-sensitive expectations if porting queries."));
+                    "Verify collation matches PostgreSQL/Oracle case-sensitive expectations if porting queries.");
             }
 
             return base.VisitMethodCall(node);
@@ -45,11 +34,9 @@ internal sealed class CaseSensitivityComparisonRule : QueryRuleBase
             if (node.NodeType is ExpressionType.Equal or ExpressionType.NotEqual &&
                 node.Left.Type == typeof(string))
             {
-                _diagnostics.Add(new QueryDiagnostic(
-                    "QD005",
-                    QueryDiagnosticSeverity.Info,
+                Info(
                     "String equality comparison on SQL Server/MySQL may be case-insensitive.",
-                    "Use explicit collation or EF.Functions.Collate when case sensitivity matters."));
+                    "Use explicit collation or EF.Functions.Collate when case sensitivity matters.");
             }
 
             return base.VisitBinary(node);

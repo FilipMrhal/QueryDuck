@@ -1,3 +1,4 @@
+using QueryDuck.Core.Adapters;
 using QueryDuck.Core.Performance;
 
 namespace QueryDuck.Core.Capture;
@@ -32,7 +33,7 @@ public static class QueryDuckSessionTables
         {
             foreach (var table in patterns.ReferencedTables)
             {
-                var normalized = NormalizeTableName(table);
+                var normalized = SqlIdentifierNormalizer.NormalizeTableName(table);
                 if (string.IsNullOrWhiteSpace(normalized))
                 {
                     continue;
@@ -88,9 +89,4 @@ public static class QueryDuckSessionTables
 
     private static double ComputeRelevance(int hitCount, double totalDurationMs) =>
         hitCount + (totalDurationMs / 1000.0);
-
-    private static string NormalizeTableName(string table) =>
-        table.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Last()
-            .Trim('"', '[', ']', '`');
 }

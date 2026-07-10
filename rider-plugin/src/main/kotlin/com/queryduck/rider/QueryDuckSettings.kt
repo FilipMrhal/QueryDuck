@@ -12,5 +12,5 @@ object QueryDuckSettings {
         PropertiesComponent.getInstance().setValue(SERVER_URL_KEY, url)
     }
 
-    const val DEFAULT_SERVER_URL = "http://127.0.0.1:17654"
+    const val DEFAULT_SERVER_URL = QueryDuckDefaults.SERVER_URL
 }

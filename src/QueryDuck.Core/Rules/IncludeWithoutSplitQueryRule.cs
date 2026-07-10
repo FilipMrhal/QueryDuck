@@ -9,26 +9,18 @@ internal sealed class IncludeWithoutSplitQueryRule : QueryRuleBase
     public override string Id => "QD010";
 
     public override IEnumerable<QueryDiagnostic> Analyze(QueryRuleContext context) =>
-        IncludeVisitor.Analyze(context.Expression);
+        IncludeVisitor.Run(() => new IncludeVisitor(Id), context.Expression);
 
-    private sealed class IncludeVisitor : ExpressionVisitor
+    private sealed class IncludeVisitor(string ruleId) : DiagnosticRuleVisitor(ruleId)
     {
-        private readonly List<QueryDiagnostic> _diagnostics = [];
         private int _includeCount;
         private bool _hasAsSplitQuery;
-
-        public static IEnumerable<QueryDiagnostic> Analyze(Expression expression)
-        {
-            var visitor = new IncludeVisitor();
-            visitor.Visit(expression);
-            return visitor._diagnostics;
-        }
 
         protected override Expression VisitMethodCall(MethodCallExpression node)
         {
             if (node.Method.DeclaringType == typeof(EntityFrameworkQueryableExtensions))
             {
-                if (node.Method.Name == "Include" || node.Method.Name == "ThenInclude")
+                if (node.Method.Name is "Include" or "ThenInclude")
                 {
                     _includeCount++;
                 }
@@ -40,11 +32,9 @@ internal sealed class IncludeWithoutSplitQueryRule : QueryRuleBase
 
             if (_includeCount >= 2 && !_hasAsSplitQuery)
             {
-                _diagnostics.Add(new QueryDiagnostic(
-                    "QD010",
-                    QueryDiagnosticSeverity.Warning,
+                Warn(
                     "Multiple Include/ThenInclude calls without AsSplitQuery — EF may generate a cartesian product join.",
-                    "Call .AsSplitQuery() after Include chains, or reduce eager loading depth."));
+                    "Call .AsSplitQuery() after Include chains, or reduce eager loading depth.");
                 _includeCount = 0;
             }
 

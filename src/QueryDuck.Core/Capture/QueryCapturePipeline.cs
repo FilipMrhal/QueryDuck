@@ -49,8 +49,7 @@ public sealed class QueryCapturePipeline
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(command);
-        var parameters = command.Parameters.Cast<DbParameter>()
-            .ToDictionary(p => p.ParameterName, p => (object?)p.Value, StringComparer.OrdinalIgnoreCase);
+        var parameters = DbParameterExtractor.ToDictionary(command);
 
         return RecordCoreAsync(
             command.CommandText,
@@ -76,8 +75,7 @@ public sealed class QueryCapturePipeline
     {
         ArgumentNullException.ThrowIfNull(command);
         ArgumentNullException.ThrowIfNull(exception);
-        var parameters = command.Parameters.Cast<DbParameter>()
-            .ToDictionary(p => p.ParameterName, p => (object?)p.Value, StringComparer.OrdinalIgnoreCase);
+        var parameters = DbParameterExtractor.ToDictionary(command);
 
         return RecordCoreAsync(
             command.CommandText,
@@ -160,10 +158,7 @@ public sealed class QueryCapturePipeline
             connection = dbConnection;
             try
             {
-                if (connection.State != System.Data.ConnectionState.Open)
-                {
-                    await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
-                }
+                await connection.EnsureOpenAsync(cancellationToken).ConfigureAwait(false);
 
                 var plan = await adapter.GetExecutionPlanAsync(connection, sql, parameters, cancellationToken)
                     .ConfigureAwait(false);
@@ -200,10 +195,7 @@ public sealed class QueryCapturePipeline
             {
                 try
                 {
-                    if (connection.State != System.Data.ConnectionState.Open)
-                    {
-                        await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
-                    }
+                    await connection.EnsureOpenAsync(cancellationToken).ConfigureAwait(false);
 
                     if (_options.EnableHistoricalStatsInsights)
                     {
@@ -359,10 +351,6 @@ public sealed class QueryCapturePipeline
 
         return statistics;
     }
-
-    private static string NormalizeTableName(string table) =>
-        table.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Last()
-            .Trim('"', '[', ']', '`');
 }
 
 public static class QueryCaptureSources

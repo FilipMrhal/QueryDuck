@@ -14,4 +14,6 @@ internal static class QueryDuckCaptureRuntime
     internal static DbConnection? LastConnection { get; set; }
 
     internal static string? LastProviderName { get; set; }
+
+    internal static QueryCaptureOptions GetCurrentOptions() => CurrentOptions ?? new QueryCaptureOptions();
 }

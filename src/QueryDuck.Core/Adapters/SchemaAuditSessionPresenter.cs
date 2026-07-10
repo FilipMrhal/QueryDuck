@@ -87,7 +87,7 @@ public static class SchemaAuditSessionPresenter
         IReadOnlyDictionary<string, double> sessionTableRelevance,
         string? tableName) =>
         !string.IsNullOrWhiteSpace(tableName) &&
-        sessionTableRelevance.ContainsKey(NormalizeTableName(tableName));
+        sessionTableRelevance.ContainsKey(SqlIdentifierNormalizer.NormalizeTableName(tableName));
 
     private static double ResolveRelevance(
         IReadOnlyDictionary<string, double> sessionTableRelevance,
@@ -98,13 +98,8 @@ public static class SchemaAuditSessionPresenter
             return 0;
         }
 
-        return sessionTableRelevance.TryGetValue(NormalizeTableName(tableName), out var score)
+        return sessionTableRelevance.TryGetValue(SqlIdentifierNormalizer.NormalizeTableName(tableName), out var score)
             ? score
             : 0;
     }
-
-    private static string NormalizeTableName(string table) =>
-        table.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Last()
-            .Trim('"', '[', ']', '`');
 }

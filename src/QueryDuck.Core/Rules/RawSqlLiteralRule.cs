@@ -9,19 +9,10 @@ internal sealed class RawSqlLiteralRule : QueryRuleBase
     public override string Id => "QD016";
 
     public override IEnumerable<QueryDiagnostic> Analyze(QueryRuleContext context) =>
-        RawSqlVisitor.Analyze(context.Expression);
+        RawSqlVisitor.Run(() => new RawSqlVisitor(Id), context.Expression);
 
-    private sealed class RawSqlVisitor : ExpressionVisitor
+    private sealed class RawSqlVisitor(string ruleId) : DiagnosticRuleVisitor(ruleId)
     {
-        private readonly List<QueryDiagnostic> _diagnostics = [];
-
-        public static IEnumerable<QueryDiagnostic> Analyze(Expression expression)
-        {
-            var visitor = new RawSqlVisitor();
-            visitor.Visit(expression);
-            return visitor._diagnostics;
-        }
-
         protected override Expression VisitMethodCall(MethodCallExpression node)
         {
             if (node.Method.DeclaringType == typeof(RelationalQueryableExtensions) &&
@@ -31,11 +22,9 @@ internal sealed class RawSqlLiteralRule : QueryRuleBase
                 !literal.Contains('?', StringComparison.Ordinal) &&
                 !literal.Contains('@', StringComparison.Ordinal))
             {
-                _diagnostics.Add(new QueryDiagnostic(
-                    "QD016",
-                    QueryDiagnosticSeverity.Warning,
+                Warn(
                     "FromSqlRaw/FromSql uses a string literal without parameters — plan cache churn and injection risk.",
-                    "Use parameterized FromSql/FromSqlInterpolated or FormattableString overloads."));
+                    "Use parameterized FromSql/FromSqlInterpolated or FormattableString overloads.");
             }
 
             if (node.Method.DeclaringType == typeof(RelationalDatabaseFacadeExtensions) &&
@@ -45,11 +34,9 @@ internal sealed class RawSqlLiteralRule : QueryRuleBase
                 !execLiteral.Contains('?', StringComparison.Ordinal) &&
                 !execLiteral.Contains('@', StringComparison.Ordinal))
             {
-                _diagnostics.Add(new QueryDiagnostic(
-                    "QD016",
-                    QueryDiagnosticSeverity.Warning,
+                Warn(
                     "ExecuteSqlRaw/ExecuteSql uses a string literal without parameters.",
-                    "Prefer ExecuteSqlInterpolated or pass SqlParameter values."));
+                    "Prefer ExecuteSqlInterpolated or pass SqlParameter values.");
             }
 
             return base.VisitMethodCall(node);

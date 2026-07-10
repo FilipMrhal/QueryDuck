@@ -75,7 +75,7 @@ public sealed record QueryCaptureEvent
 
     public SourceLocation? SourceLocation { get; init; }
 
-    public int SchemaVersion { get; init; } = 8;
+    public int SchemaVersion { get; init; } = QueryDuckDefaults.EventSchemaVersion;
 }
 
 public sealed class QueryCaptureOptions
@@ -86,9 +86,9 @@ public sealed class QueryCaptureOptions
 
     public bool StartLocalEventServer { get; set; } = true;
 
-    public string ServerPrefix { get; set; } = "http://127.0.0.1:17654/";
+    public string ServerPrefix { get; set; } = QueryDuckDefaults.ServerPrefix;
 
-    public string PublishEndpoint { get; set; } = "http://127.0.0.1:17654/queryduck/events";
+    public string PublishEndpoint { get; set; } = QueryDuckDefaults.EventsUrl;
 
     public bool CaptureExecutionPlans { get; set; }
 

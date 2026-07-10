@@ -109,10 +109,7 @@ public static class QueryDuckSchemaAuditCache
     {
         try
         {
-            if (connection.State != System.Data.ConnectionState.Open)
-            {
-                await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
-            }
+            await connection.EnsureOpenAsync(cancellationToken).ConfigureAwait(false);
 
             var result = await adapter.AuditSchemaAsync(model, connection, cancellationToken).ConfigureAwait(false);
             var snapshot = new QueryDuckSchemaAuditSnapshot(

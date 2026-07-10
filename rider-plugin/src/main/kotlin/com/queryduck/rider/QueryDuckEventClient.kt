@@ -9,7 +9,7 @@ import java.net.http.HttpResponse
 import java.time.Duration
 
 class QueryDuckEventClient(
-    val baseUrl: String = "http://127.0.0.1:17654",
+    val baseUrl: String = QueryDuckDefaults.SERVER_URL,
 ) {
     private val gson = Gson()
     private val http = HttpClient.newBuilder()
@@ -18,7 +18,7 @@ class QueryDuckEventClient(
 
     fun fetchEvents(): List<QueryCaptureEventDto> {
         val request = HttpRequest.newBuilder()
-            .uri(URI.create("$baseUrl/queryduck/events"))
+            .uri(URI.create("$baseUrl${QueryDuckRoutes.EVENTS}"))
             .timeout(Duration.ofSeconds(3))
             .GET()
             .build()
@@ -34,7 +34,7 @@ class QueryDuckEventClient(
 
     fun fetchHealth(): HealthResponse {
         val request = HttpRequest.newBuilder()
-            .uri(URI.create("$baseUrl/queryduck/health"))
+            .uri(URI.create("$baseUrl${QueryDuckRoutes.HEALTH}"))
             .timeout(Duration.ofSeconds(2))
             .GET()
             .build()
@@ -49,7 +49,7 @@ class QueryDuckEventClient(
 
     fun clearEvents() {
         val request = HttpRequest.newBuilder()
-            .uri(URI.create("$baseUrl/queryduck/events/clear"))
+            .uri(URI.create("$baseUrl${QueryDuckRoutes.EVENTS_CLEAR}"))
             .timeout(Duration.ofSeconds(2))
             .POST(HttpRequest.BodyPublishers.noBody())
             .build()
@@ -62,7 +62,7 @@ class QueryDuckEventClient(
 
     fun fetchSchemaAudit(): QueryDuckSchemaAuditPresentationDto {
         val request = HttpRequest.newBuilder()
-            .uri(URI.create("$baseUrl/queryduck/schema/audit"))
+            .uri(URI.create("$baseUrl${QueryDuckRoutes.SCHEMA_AUDIT}"))
             .timeout(Duration.ofSeconds(3))
             .GET()
             .build()
@@ -82,7 +82,7 @@ class QueryDuckEventClient(
 
     fun setSessionBaseline(): QueryDuckSessionSnapshotDto {
         val request = HttpRequest.newBuilder()
-            .uri(URI.create("$baseUrl/queryduck/session/baseline"))
+            .uri(URI.create("$baseUrl${QueryDuckRoutes.SESSION_BASELINE}"))
             .timeout(Duration.ofSeconds(3))
             .POST(HttpRequest.BodyPublishers.noBody())
             .build()
@@ -97,7 +97,7 @@ class QueryDuckEventClient(
 
     fun compareSession(): QueryDuckSessionComparisonDto {
         val request = HttpRequest.newBuilder()
-            .uri(URI.create("$baseUrl/queryduck/session/compare"))
+            .uri(URI.create("$baseUrl${QueryDuckRoutes.SESSION_COMPARE}"))
             .timeout(Duration.ofSeconds(3))
             .GET()
             .build()
@@ -112,7 +112,7 @@ class QueryDuckEventClient(
 
     fun exportSession(): String {
         val request = HttpRequest.newBuilder()
-            .uri(URI.create("$baseUrl/queryduck/session/export"))
+            .uri(URI.create("$baseUrl${QueryDuckRoutes.SESSION_EXPORT}"))
             .timeout(Duration.ofSeconds(5))
             .GET()
             .build()
@@ -127,7 +127,7 @@ class QueryDuckEventClient(
 
     fun importSession(json: String): Int {
         val request = HttpRequest.newBuilder()
-            .uri(URI.create("$baseUrl/queryduck/session/import"))
+            .uri(URI.create("$baseUrl${QueryDuckRoutes.SESSION_IMPORT}"))
             .timeout(Duration.ofSeconds(5))
             .header("Content-Type", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(json))
@@ -143,11 +143,11 @@ class QueryDuckEventClient(
     }
 
     fun fetchSessionHotspots(): QueryDuckSessionHotspotsDto =
-        fetchTyped("$baseUrl/queryduck/session/hotspots", QueryDuckSessionHotspotsDto::class.java)
+        fetchTyped("$baseUrl${QueryDuckRoutes.SESSION_HOTSPOTS}", QueryDuckSessionHotspotsDto::class.java)
 
     fun fetchSessionTimeline(): List<QueryDuckTimelineEntryDto> {
         val request = HttpRequest.newBuilder()
-            .uri(URI.create("$baseUrl/queryduck/session/timeline"))
+            .uri(URI.create("$baseUrl${QueryDuckRoutes.SESSION_TIMELINE}"))
             .timeout(Duration.ofSeconds(3))
             .GET()
             .build()
@@ -162,12 +162,12 @@ class QueryDuckEventClient(
     }
 
     fun fetchSessionTraces(): QueryDuckTraceGroupingDto =
-        fetchTyped("$baseUrl/queryduck/session/traces", QueryDuckTraceGroupingDto::class.java)
+        fetchTyped("$baseUrl${QueryDuckRoutes.SESSION_TRACES}", QueryDuckTraceGroupingDto::class.java)
 
     fun diffEvents(leftEventId: String, rightEventId: String): QueryCaptureEventDiffDto {
         val payload = gson.toJson(mapOf("leftEventId" to leftEventId, "rightEventId" to rightEventId))
         val request = HttpRequest.newBuilder()
-            .uri(URI.create("$baseUrl/queryduck/events/diff"))
+            .uri(URI.create("$baseUrl${QueryDuckRoutes.EVENTS_DIFF}"))
             .timeout(Duration.ofSeconds(3))
             .header("Content-Type", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(payload))
@@ -182,7 +182,7 @@ class QueryDuckEventClient(
     }
 
     fun fetchStatementCacheDiagnostics(): QueryDuckStatementCacheDiagnosticsDto =
-        fetchTyped("$baseUrl/queryduck/diagnostics/statement-cache", QueryDuckStatementCacheDiagnosticsDto::class.java)
+        fetchTyped("$baseUrl${QueryDuckRoutes.STATEMENT_CACHE}", QueryDuckStatementCacheDiagnosticsDto::class.java)
 
     private fun <T> fetchTyped(url: String, clazz: Class<T>): T {
         val request = HttpRequest.newBuilder()
@@ -201,7 +201,7 @@ class QueryDuckEventClient(
 
     fun clearHeuristicMemory() {
         val request = HttpRequest.newBuilder()
-            .uri(URI.create("$baseUrl/queryduck/memory/clear"))
+            .uri(URI.create("$baseUrl${QueryDuckRoutes.MEMORY_CLEAR}"))
             .timeout(Duration.ofSeconds(2))
             .POST(HttpRequest.BodyPublishers.noBody())
             .build()
@@ -214,9 +214,9 @@ class QueryDuckEventClient(
 
     fun fetchHeuristicWorkload(provider: String? = null): String {
         val uri = if (provider.isNullOrBlank()) {
-            "$baseUrl/queryduck/memory/workload"
+            "$baseUrl${QueryDuckRoutes.MEMORY_WORKLOAD}"
         } else {
-            "$baseUrl/queryduck/memory/workload?provider=$provider"
+            "$baseUrl${QueryDuckRoutes.MEMORY_WORKLOAD}?provider=$provider"
         }
         val request = HttpRequest.newBuilder()
             .uri(URI.create(uri))
@@ -249,7 +249,7 @@ class QueryDuckEventClient(
             ),
         )
         val request = HttpRequest.newBuilder()
-            .uri(URI.create("$baseUrl/queryduck/memory/feedback"))
+            .uri(URI.create("$baseUrl${QueryDuckRoutes.MEMORY_FEEDBACK}"))
             .timeout(Duration.ofSeconds(2))
             .header("Content-Type", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(payload))
@@ -263,7 +263,7 @@ class QueryDuckEventClient(
 
     fun fetchHeuristicMemoryStats(): QueryHeuristicMemoryStatsDto {
         val request = HttpRequest.newBuilder()
-            .uri(URI.create("$baseUrl/queryduck/memory/stats"))
+            .uri(URI.create("$baseUrl${QueryDuckRoutes.MEMORY_STATS}"))
             .timeout(Duration.ofSeconds(2))
             .GET()
             .build()

@@ -8,19 +8,10 @@ internal sealed class InlinedConstantRule : QueryRuleBase
     public override string Id => "QD002";
 
     public override IEnumerable<QueryDiagnostic> Analyze(QueryRuleContext context) =>
-        InlinedConstantVisitor.Analyze(context.Expression);
+        InlinedConstantVisitor.Run(() => new InlinedConstantVisitor(Id), context.Expression);
 
-    private sealed class InlinedConstantVisitor : ExpressionVisitor
+    private sealed class InlinedConstantVisitor(string ruleId) : DiagnosticRuleVisitor(ruleId)
     {
-        private readonly List<QueryDiagnostic> _diagnostics = [];
-
-        public static IEnumerable<QueryDiagnostic> Analyze(Expression expression)
-        {
-            var visitor = new InlinedConstantVisitor();
-            visitor.Visit(expression);
-            return visitor._diagnostics;
-        }
-
         protected override Expression VisitBinary(BinaryExpression node)
         {
             if (IsPredicateComparison(node.NodeType))
@@ -36,11 +27,9 @@ internal sealed class InlinedConstantRule : QueryRuleBase
         {
             if (expression is ConstantExpression { Value: not null })
             {
-                _diagnostics.Add(new QueryDiagnostic(
-                    "QD002",
-                    QueryDiagnosticSeverity.Warning,
+                Warn(
                     $"Inlined constant '{expression.Type.Name}' in predicate — may cause plan cache misses / hard parses.",
-                    "Capture the value in a local variable so EF parameterizes it, or use EF.Parameter() / EF.Constant() explicitly."));
+                    "Capture the value in a local variable so EF parameterizes it, or use EF.Parameter() / EF.Constant() explicitly.");
             }
         }
 

@@ -8,19 +8,11 @@ internal sealed class StringContainsPatternRule : QueryRuleBase
     public override string Id => "QD013";
 
     public override IEnumerable<QueryDiagnostic> Analyze(QueryRuleContext context) =>
-        StringMethodVisitor.Analyze(context.Expression);
+        StringMethodVisitor.Run(() => new StringMethodVisitor(Id), context.Expression);
 
-    private sealed class StringMethodVisitor : ExpressionVisitor
+    private sealed class StringMethodVisitor(string ruleId) : DiagnosticRuleVisitor(ruleId)
     {
-        private readonly List<QueryDiagnostic> _diagnostics = [];
         private int _lambdaDepth;
-
-        public static IEnumerable<QueryDiagnostic> Analyze(Expression expression)
-        {
-            var visitor = new StringMethodVisitor();
-            visitor.Visit(expression);
-            return visitor._diagnostics;
-        }
 
         protected override Expression VisitLambda<T>(Expression<T> node)
         {
@@ -37,11 +29,9 @@ internal sealed class StringContainsPatternRule : QueryRuleBase
                 node.Method.Name is "Contains" or "StartsWith" or "EndsWith" &&
                 node.Object?.Type == typeof(string))
             {
-                _diagnostics.Add(new QueryDiagnostic(
-                    "QD013",
-                    QueryDiagnosticSeverity.Info,
+                Info(
                     $"string.{node.Method.Name} in a LINQ predicate is often index-unfriendly (especially Contains/leading wildcards).",
-                    "Prefer equality/range filters, full-text search, or provider-specific index types for text search."));
+                    "Prefer equality/range filters, full-text search, or provider-specific index types for text search.");
             }
 
             return base.VisitMethodCall(node);

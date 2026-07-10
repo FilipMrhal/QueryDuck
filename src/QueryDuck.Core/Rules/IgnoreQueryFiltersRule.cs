@@ -9,29 +9,18 @@ internal sealed class IgnoreQueryFiltersRule : QueryRuleBase
     public override string Id => "QD024";
 
     public override IEnumerable<QueryDiagnostic> Analyze(QueryRuleContext context) =>
-        IgnoreFiltersVisitor.Analyze(context.Expression);
+        IgnoreFiltersVisitor.Run(() => new IgnoreFiltersVisitor(Id), context.Expression);
 
-    private sealed class IgnoreFiltersVisitor : ExpressionVisitor
+    private sealed class IgnoreFiltersVisitor(string ruleId) : DiagnosticRuleVisitor(ruleId)
     {
-        private readonly List<QueryDiagnostic> _diagnostics = [];
-
-        public static IEnumerable<QueryDiagnostic> Analyze(Expression expression)
-        {
-            var visitor = new IgnoreFiltersVisitor();
-            visitor.Visit(expression);
-            return visitor._diagnostics;
-        }
-
         protected override Expression VisitMethodCall(MethodCallExpression node)
         {
             if (node.Method.DeclaringType == typeof(EntityFrameworkQueryableExtensions) &&
                 node.Method.Name == "IgnoreQueryFilters")
             {
-                _diagnostics.Add(new QueryDiagnostic(
-                    "QD024",
-                    QueryDiagnosticSeverity.Warning,
+                Warn(
                     "IgnoreQueryFilters bypasses global filters — soft-delete and tenant filters are disabled.",
-                    "Document why filters are bypassed, or scope the query with explicit tenant predicates."));
+                    "Document why filters are bypassed, or scope the query with explicit tenant predicates.");
             }
 
             return base.VisitMethodCall(node);

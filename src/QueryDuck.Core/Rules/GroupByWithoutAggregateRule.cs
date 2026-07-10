@@ -7,29 +7,27 @@ internal sealed class GroupByWithoutAggregateRule : QueryRuleBase
 {
     public override string Id => "QD023";
 
-    public override IEnumerable<QueryDiagnostic> Analyze(QueryRuleContext context) =>
-        GroupByVisitor.Analyze(context.Expression);
-
-    private sealed class GroupByVisitor : ExpressionVisitor
+    public override IEnumerable<QueryDiagnostic> Analyze(QueryRuleContext context)
     {
-        private readonly List<QueryDiagnostic> _diagnostics = [];
+        var visitor = new GroupByVisitor(Id);
+        visitor.Visit(context.Expression);
+        visitor.Complete();
+        return visitor.Results;
+    }
+
+    private sealed class GroupByVisitor(string ruleId) : DiagnosticRuleVisitor(ruleId)
+    {
         private bool _hasGroupBy;
         private bool _hasAggregate;
 
-        public static IEnumerable<QueryDiagnostic> Analyze(Expression expression)
+        internal void Complete()
         {
-            var visitor = new GroupByVisitor();
-            visitor.Visit(expression);
-            if (visitor._hasGroupBy && !visitor._hasAggregate)
+            if (_hasGroupBy && !_hasAggregate)
             {
-                visitor._diagnostics.Add(new QueryDiagnostic(
-                    "QD023",
-                    QueryDiagnosticSeverity.Warning,
+                Warn(
                     "GroupBy without an aggregate or projection may return large grouped sequences.",
-                    "Project grouped results with Select, or aggregate with Sum/Count/Max/Min."));
+                    "Project grouped results with Select, or aggregate with Sum/Count/Max/Min.");
             }
-
-            return visitor._diagnostics;
         }
 
         protected override Expression VisitMethodCall(MethodCallExpression node)
@@ -40,7 +38,14 @@ internal sealed class GroupByWithoutAggregateRule : QueryRuleBase
                 {
                     _hasGroupBy = true;
                 }
-                else if (node.Method.Name is "Sum" or "Count" or "LongCount" or "Average" or "Min" or "Max")
+                else if (QueryableExpressionHelpers.IsQueryableMethod(
+                             node,
+                             "Sum",
+                             "Count",
+                             "LongCount",
+                             "Average",
+                             "Min",
+                             "Max"))
                 {
                     _hasAggregate = true;
                 }

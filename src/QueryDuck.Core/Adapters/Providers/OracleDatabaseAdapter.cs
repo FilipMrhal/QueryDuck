@@ -17,7 +17,7 @@ public sealed class OracleDatabaseAdapter : IDatabaseAdapter
         ArgumentNullException.ThrowIfNull(model);
         ArgumentNullException.ThrowIfNull(connection);
         var columns = await ReadColumnsAsync(connection, cancellationToken).ConfigureAwait(false);
-        return SchemaAuditHelper.Compare(model, columns, defaultSchema: connection.Database.ToUpperInvariant());
+        return SchemaAuditHelper.Compare(model, columns, defaultSchema: ProviderSchemaHelper.DefaultSchemaForAudit(Provider, connection));
     }
 
     public async Task<ExecutionPlanResult> GetExecutionPlanAsync(
@@ -47,89 +47,69 @@ public sealed class OracleDatabaseAdapter : IDatabaseAdapter
 
     public async Task<IReadOnlyList<StatementCacheFinding>> GetStatementCacheDiagnosticsAsync(
         DbConnection connection,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(connection);
-        var findings = new List<StatementCacheFinding>();
-
-        try
-        {
-            await using var command = connection.CreateCommand();
-            command.CommandText = """
-                SELECT FORCE_MATCHING_SIGNATURE, COUNT(*) AS VARIANT_COUNT
-                FROM V$SQL
-                WHERE FORCE_MATCHING_SIGNATURE > 0
-                GROUP BY FORCE_MATCHING_SIGNATURE
-                HAVING COUNT(*) > 5
-                ORDER BY COUNT(*) DESC
-                FETCH FIRST 20 ROWS ONLY
-                """;
-
-            await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
-            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        CancellationToken cancellationToken = default) =>
+        await StatementCacheDiagnosticsHelper.QueryAsync(
+            connection,
+            $"""
+            SELECT FORCE_MATCHING_SIGNATURE, COUNT(*) AS VARIANT_COUNT
+            FROM V$SQL
+            WHERE FORCE_MATCHING_SIGNATURE > 0
+            GROUP BY FORCE_MATCHING_SIGNATURE
+            HAVING COUNT(*) > {DiagnosticsLimits.StatementCacheVariantThreshold}
+            ORDER BY COUNT(*) DESC
+            FETCH FIRST {DiagnosticsLimits.StatementCacheResultLimit} ROWS ONLY
+            """,
+            reader =>
             {
                 var signature = reader.GetValue(0)?.ToString() ?? "unknown";
                 var count = reader.GetInt32(1);
-                findings.Add(new StatementCacheFinding(
+                return new StatementCacheFinding(
                     signature,
                     count,
-                    $"Oracle hard-parse risk: {count} SQL variants share signature {signature}."));
-            }
-        }
-        catch (Exception ex)
-        {
-            findings.Add(new StatementCacheFinding(
-                "unsupported",
-                0,
-                $"V$SQL diagnostics unavailable: {ex.Message}"));
-        }
+                    $"Oracle hard-parse risk: {count} SQL variants share signature {signature}.");
+            },
+            ex => $"V$SQL diagnostics unavailable: {ex.Message}",
+            cancellationToken).ConfigureAwait(false);
 
-        return findings;
-    }
-
-    public async Task<QueryHistoricalStatsInsight?> TryMatchHistoricalStatsAsync(
+    public Task<QueryHistoricalStatsInsight?> TryMatchHistoricalStatsAsync(
         DbConnection connection,
         string sql,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(connection);
-        ArgumentException.ThrowIfNullOrWhiteSpace(sql);
+        CancellationToken cancellationToken = default) =>
+        HistoricalStatsQueryHelper.TryMatchAsync(
+            connection,
+            sql,
+            $"""
+            SELECT sql_text,
+                   executions,
+                   elapsed_time / NULLIF(executions, 0) / 1000 AS mean_ms,
+                   elapsed_time / 1000 AS total_ms,
+                   rows_processed,
+                   buffer_gets,
+                   disk_reads
+            FROM (
+                SELECT sql_text, executions, elapsed_time, rows_processed, buffer_gets, disk_reads
+                FROM v$sql
+                WHERE sql_text IS NOT NULL
+                ORDER BY elapsed_time / NULLIF(executions, 0) DESC
+                FETCH FIRST {DiagnosticsLimits.HistoricalStatsSampleSize} ROWS ONLY
+            )
+            """,
+            MapHistoricalStatsRow,
+            cancellationToken);
 
-        try
-        {
-            await using var command = connection.CreateCommand();
-            command.CommandText = """
-                SELECT sql_text,
-                       executions,
-                       elapsed_time / NULLIF(executions, 0) / 1000 AS mean_ms,
-                       elapsed_time / 1000 AS total_ms,
-                       rows_processed,
-                       buffer_gets,
-                       disk_reads
-                FROM (
-                    SELECT sql_text, executions, elapsed_time, rows_processed, buffer_gets, disk_reads
-                    FROM v$sql
-                    WHERE sql_text IS NOT NULL
-                    ORDER BY elapsed_time / NULLIF(executions, 0) DESC
-                    FETCH FIRST 200 ROWS ONLY
-                )
-                """;
-
-            await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
-            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+    private static QueryHistoricalStatsInsight? MapHistoricalStatsRow(DbDataReader reader, string sql) =>
+        HistoricalStatsRowMapper.TryMap(
+            reader,
+            sql,
+            r => r.GetString(0),
+            (r, queryText) =>
             {
-                var queryText = reader.GetString(0);
-                if (!QueryHistoricalStatsSqlMatcher.IsLikelyMatch(sql, queryText))
-                {
-                    continue;
-                }
-
-                var calls = reader.GetInt64(1);
-                var meanMs = reader.IsDBNull(2) ? 0 : Convert.ToDouble(reader.GetValue(2));
-                var totalMs = reader.IsDBNull(3) ? 0 : Convert.ToDouble(reader.GetValue(3));
-                var rows = reader.IsDBNull(4) ? 0 : reader.GetInt64(4);
-                var bufferGets = reader.IsDBNull(5) ? 0 : reader.GetInt64(5);
-                var diskReads = reader.IsDBNull(6) ? 0 : reader.GetInt64(6);
+                var calls = r.GetInt64(1);
+                var meanMs = r.IsDBNull(2) ? 0 : Convert.ToDouble(r.GetValue(2));
+                var totalMs = r.IsDBNull(3) ? 0 : Convert.ToDouble(r.GetValue(3));
+                var rows = r.IsDBNull(4) ? 0 : r.GetInt64(4);
+                var bufferGets = r.IsDBNull(5) ? 0 : r.GetInt64(5);
+                var diskReads = r.IsDBNull(6) ? 0 : r.GetInt64(6);
                 var ratio = bufferGets + diskReads == 0
                     ? (double?)null
                     : (bufferGets - diskReads) / (double)Math.Max(1, bufferGets);
@@ -142,43 +122,20 @@ public sealed class OracleDatabaseAdapter : IDatabaseAdapter
                     ratio,
                     queryText,
                     "V$SQL");
-            }
-        }
-        catch (Exception)
-        {
-            return null;
-        }
+            });
 
-        return null;
-    }
-
-    private static async Task<List<SchemaColumnInfo>> ReadColumnsAsync(
+    private static Task<List<SchemaColumnInfo>> ReadColumnsAsync(
         DbConnection connection,
-        CancellationToken cancellationToken)
-    {
-        var columns = new List<SchemaColumnInfo>();
-        await using var command = connection.CreateCommand();
-        command.CommandText = """
+        CancellationToken cancellationToken) =>
+        SchemaColumnReader.QueryAsync(
+            connection,
+            """
             SELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE, NULLABLE, DATA_LENGTH, DATA_PRECISION, DATA_SCALE
             FROM ALL_TAB_COLUMNS
             WHERE OWNER = USER
-            """;
-
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
-        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
-        {
-            columns.Add(new SchemaColumnInfo(
-                reader.GetString(0),
-                reader.GetString(1),
-                reader.GetString(2),
-                reader.GetString(3).Equals("Y", StringComparison.OrdinalIgnoreCase),
-                reader.IsDBNull(4) ? null : reader.GetInt32(4),
-                reader.IsDBNull(5) ? null : Convert.ToInt32(reader.GetValue(5)),
-                reader.IsDBNull(6) ? null : Convert.ToInt32(reader.GetValue(6))));
-        }
-
-        return columns;
-    }
+            """,
+            reader => SchemaColumnReader.MapOracleRow(reader),
+            cancellationToken);
 }
 
 public static class OracleQueryDuckExtensions

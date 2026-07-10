@@ -223,7 +223,7 @@ public static class SlowQueryImprovementEngine
             return null;
         }
 
-        var normalizedTable = NormalizeTableName(table);
+        var normalizedTable = SqlIdentifierNormalizer.NormalizeTableName(table);
         if (!tableStatistics.TryGetValue(normalizedTable, out var stats) &&
             !tableStatistics.TryGetValue(table, out stats))
         {
@@ -247,10 +247,6 @@ public static class SlowQueryImprovementEngine
             $"pg_stat_statements: {pgStat.Calls} calls, mean {pgStat.MeanExecTimeMs:F1} ms, total {pgStat.TotalExecTimeMs:F0} ms, " +
             $"{pgStat.Rows} rows returned, cache hit {hitRatio:P0}. Current capture: {currentDurationMs:F0} ms.";
     }
-
-    private static string NormalizeTableName(string table) =>
-        table.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Last()
-            .Trim('"', '[', ']', '`');
 
     private static SlowQueryRecommendation? FindPrimaryRewrite(IReadOnlyList<SlowQueryRecommendation> recommendations)
     {

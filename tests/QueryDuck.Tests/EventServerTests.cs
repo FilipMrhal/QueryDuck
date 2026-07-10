@@ -9,6 +9,8 @@ using QueryDuck.Core;
 using QueryDuck.Core.Capture;
 using QueryDuck.Core.Learning;
 using QueryDuck.Sample;
+using QueryDuck.Testing.Factories;
+using TestEventFactory = QueryDuck.Testing.Factories.QueryCaptureEventFactory;
 
 namespace QueryDuck.Tests;
 
@@ -35,7 +37,7 @@ public sealed class EventServerTests : IAsyncLifetime
     public async Task Health_ReturnsOkWithCount()
     {
         StartServer();
-        QueryDuckCapture.Record(CreateEvent("health-test"));
+        QueryDuckCapture.Record(TestEventFactory.CreateMarker("health-test"));
 
         using var client = new HttpClient();
         var response = await client.GetFromJsonAsync<HealthResponse>(new Uri(Prefix, "queryduck/health"));
@@ -49,7 +51,7 @@ public sealed class EventServerTests : IAsyncLifetime
     public async Task GetEvents_ReturnsCapturedCommands()
     {
         StartServer();
-        QueryDuckCapture.Record(CreateEvent("listed"));
+        QueryDuckCapture.Record(TestEventFactory.CreateMarker("listed"));
 
         using var client = new HttpClient();
         var events = await client.GetFromJsonAsync<List<QueryCaptureEvent>>(new Uri(Prefix, "queryduck/events"));
@@ -65,7 +67,7 @@ public sealed class EventServerTests : IAsyncLifetime
         QueryDuckCapture.Clear();
 
         using var client = new HttpClient();
-        var payload = JsonSerializer.Serialize(CreateEvent("posted"), JsonOptions);
+        var payload = JsonSerializer.Serialize(TestEventFactory.CreateMarker("posted"), JsonOptions);
         using var content = new StringContent(payload, Encoding.UTF8, "application/json");
         var response = await client.PostAsync(new Uri(Prefix, "queryduck/events"), content);
 
@@ -78,7 +80,7 @@ public sealed class EventServerTests : IAsyncLifetime
     public async Task ClearEvents_RemovesBufferedCommands()
     {
         StartServer();
-        QueryDuckCapture.Record(CreateEvent("clear-me"));
+        QueryDuckCapture.Record(TestEventFactory.CreateMarker("clear-me"));
 
         using var client = new HttpClient();
         var response = await client.PostAsync(new Uri(Prefix, "queryduck/events/clear"), null);
@@ -91,7 +93,7 @@ public sealed class EventServerTests : IAsyncLifetime
     public async Task LatestEvents_ReturnsNdjsonPayload()
     {
         StartServer();
-        QueryDuckCapture.Record(CreateEvent("latest"));
+        QueryDuckCapture.Record(TestEventFactory.CreateMarker("latest"));
 
         using var client = new HttpClient();
         var body = await client.GetStringAsync(new Uri(Prefix, "queryduck/events/latest"));
@@ -305,14 +307,6 @@ public sealed class EventServerTests : IAsyncLifetime
             ServerPrefix = Prefix.ToString(),
         });
     }
-
-    private static QueryCaptureEvent CreateEvent(string marker) => new()
-    {
-        EventId = Guid.NewGuid().ToString("N"),
-        Timestamp = DateTimeOffset.UtcNow,
-        Sql = $"SELECT {marker}",
-        Provider = "Oracle",
-    };
 
     private sealed record StatementCacheResponse(
         string Provider,
