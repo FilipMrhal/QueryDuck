@@ -29,8 +29,7 @@ public sealed class PostgreSqlDatabaseAdapter : IDatabaseAdapter
         ArgumentNullException.ThrowIfNull(connection);
         ArgumentNullException.ThrowIfNull(sql);
 
-        await using var command = connection.CreateCommand();
-        command.CommandText = $"EXPLAIN (FORMAT JSON) {sql}";
+        await using var command = ExplainCommandHelper.CreateCommand(connection, $"EXPLAIN (FORMAT JSON) {sql}", parameters);
         var planText = (await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))?.ToString() ?? string.Empty;
         return new ExecutionPlanResult(planText, SchemaAuditHelper.ComputePlanHash(planText));
     }

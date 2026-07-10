@@ -29,8 +29,7 @@ public sealed class SqliteDatabaseAdapter : IDatabaseAdapter
         ArgumentNullException.ThrowIfNull(connection);
         ArgumentNullException.ThrowIfNull(sql);
 
-        await using var command = connection.CreateCommand();
-        command.CommandText = $"EXPLAIN QUERY PLAN {sql}";
+        await using var command = ExplainCommandHelper.CreateCommand(connection, $"EXPLAIN QUERY PLAN {sql}", parameters);
         var plan = new System.Text.StringBuilder();
         await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
         while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))

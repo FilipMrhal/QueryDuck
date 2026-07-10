@@ -29,8 +29,7 @@ public sealed class OracleDatabaseAdapter : IDatabaseAdapter
         ArgumentNullException.ThrowIfNull(connection);
         ArgumentNullException.ThrowIfNull(sql);
 
-        await using var explain = connection.CreateCommand();
-        explain.CommandText = $"EXPLAIN PLAN FOR {sql}";
+        await using var explain = ExplainCommandHelper.CreateCommand(connection, $"EXPLAIN PLAN FOR {sql}", parameters);
         await explain.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
 
         await using var display = connection.CreateCommand();

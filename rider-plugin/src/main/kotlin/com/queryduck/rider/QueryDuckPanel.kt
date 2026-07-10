@@ -1,5 +1,6 @@
 package com.queryduck.rider
 
+import com.intellij.openapi.Disposable
 import com.intellij.openapi.fileEditor.OpenFileDescriptor
 import com.intellij.openapi.ide.CopyPasteManager
 import com.intellij.openapi.project.Project
@@ -35,8 +36,9 @@ import javax.swing.SwingUtilities
 import javax.swing.Timer
 import javax.swing.table.AbstractTableModel
 
-class QueryDuckPanel(private val project: Project) : JPanel(BorderLayout()) {
-    private var client = QueryDuckEventClient(DEFAULT_SERVER_URL)
+class QueryDuckPanel(private val project: Project) : JPanel(BorderLayout()), Disposable {
+    private var client = QueryDuckEventClient(QueryDuckSettings.loadServerUrl())
+    private val backgroundExecutor = QueryDuckBackgroundExecutor()
     private val events = mutableListOf<QueryCaptureEventDto>()
     private val tableModel = EventTableModel()
     private val table = JBTable(tableModel).apply {
@@ -69,7 +71,7 @@ class QueryDuckPanel(private val project: Project) : JPanel(BorderLayout()) {
         foreground = Color(0xE05555)
     }
 
-    private val serverUrlField = JTextField(DEFAULT_SERVER_URL, 24).apply {
+    private val serverUrlField = JTextField(QueryDuckSettings.loadServerUrl(), 24).apply {
         toolTipText = "QueryDuck event server base URL"
     }
 
@@ -90,7 +92,6 @@ class QueryDuckPanel(private val project: Project) : JPanel(BorderLayout()) {
     private val planPanel = QueryDuckCodeEditor.planPanel(project)
     private val improvementsPanel = QueryDuckCodeEditor.planPanel(project)
     private val planGraphPanel = JPanel(BorderLayout())
-    private val pgStatPanel = QueryDuckCodeEditor.planPanel(project)
     private val schemaPanel = QueryDuckCodeEditor.planPanel(project)
     private val schemaRecommendationsList = JList<SchemaRecommendationDto>().apply {
         selectionMode = ListSelectionModel.SINGLE_SELECTION
@@ -111,11 +112,16 @@ class QueryDuckPanel(private val project: Project) : JPanel(BorderLayout()) {
         addListSelectionListener { showSelectedSchemaRecommendation() }
     }
     private val sessionPanel = QueryDuckCodeEditor.planPanel(project)
+    private val sessionImportField = JTextField(24).apply {
+        toolTipText = "Paste exported session JSON here before Import"
+    }
     private val memoryPanel = QueryDuckCodeEditor.planPanel(project)
-    private val hotspotsPanel = QueryDuckCodeEditor.planPanel(project)
-    private val timelinePanel = QueryDuckCodeEditor.planPanel(project)
-    private val tracesPanel = QueryDuckCodeEditor.planPanel(project)
-    private val diffPanel = QueryDuckCodeEditor.planPanel(project)
+    private val hotspotsPanel = SessionViewPanels.createHotspotsPanel(project)
+    private val timelinePanel = SessionViewPanels.createTimelinePanel(project)
+    private val tracesPanel = SessionViewPanels.createTracesPanel(project)
+    private val diffPanel = SessionViewPanels.createDiffPanel(project)
+    private val statementCachePanel = SessionViewPanels.createStatementCachePanel(project)
+    private val pgStatCardPanel = JPanel(FlowLayout(FlowLayout.LEFT, 12, 6))
     private val suggestedSqlPanel = TitledCodeEditorPanel(project, "SQL", "SQL") {
         recordHeuristicFeedback("Copied")
     }
@@ -144,18 +150,11 @@ class QueryDuckPanel(private val project: Project) : JPanel(BorderLayout()) {
         addTab("Improvements", buildImprovementsPanel())
         addTab("Schema", buildSchemaPanel())
         addTab("Session", buildSessionPanel())
-        addTab("Hotspots", JBScrollPane(hotspotsPanel).apply {
-            border = BorderFactory.createTitledBorder("Query shape hotspots")
-        })
-        addTab("Timeline", JBScrollPane(timelinePanel).apply {
-            border = BorderFactory.createTitledBorder("Transaction / SaveChanges timeline")
-        })
-        addTab("Traces", JBScrollPane(tracesPanel).apply {
-            border = BorderFactory.createTitledBorder("Trace / request grouping")
-        })
-        addTab("Diff", JBScrollPane(diffPanel).apply {
-            border = BorderFactory.createTitledBorder("Two-query diff")
-        })
+        addTab("Hotspots", hotspotsPanel)
+        addTab("Timeline", timelinePanel)
+        addTab("Traces", tracesPanel)
+        addTab("Diff", diffPanel)
+        addTab("Cache", buildStatementCachePanel())
         addTab("Memory", buildMemoryPanel())
     }
 
@@ -190,6 +189,8 @@ class QueryDuckPanel(private val project: Project) : JPanel(BorderLayout()) {
                     add(JButton("Set baseline").apply { addActionListener { setSessionBaseline() } })
                     add(JButton("Compare").apply { addActionListener { compareSession() } })
                     add(JButton("Export").apply { addActionListener { exportSession() } })
+                    add(JLabel("Import JSON"))
+                    add(sessionImportField)
                     add(JButton("Import").apply { addActionListener { importSession() } })
                     add(JButton("Refresh views").apply { addActionListener { refreshSessionViews() } })
                     add(JButton("Compare 2 selected").apply { addActionListener { compareSelectedEvents() } })
@@ -199,6 +200,17 @@ class QueryDuckPanel(private val project: Project) : JPanel(BorderLayout()) {
             add(JBScrollPane(sessionPanel).apply {
                 border = BorderFactory.createTitledBorder("Session comparison")
             }, BorderLayout.CENTER)
+        }
+
+    private fun buildStatementCachePanel(): JPanel =
+        JPanel(BorderLayout()).apply {
+            add(
+                JPanel(FlowLayout(FlowLayout.LEFT)).apply {
+                    add(JButton("Refresh cache diagnostics").apply { addActionListener { refreshStatementCache() } })
+                },
+                BorderLayout.NORTH,
+            )
+            add(statementCachePanel, BorderLayout.CENTER)
         }
 
     private fun buildMemoryPanel(): JPanel =
@@ -242,8 +254,8 @@ class QueryDuckPanel(private val project: Project) : JPanel(BorderLayout()) {
                     },
                     BorderLayout.CENTER,
                 )
-                add(JBScrollPane(pgStatPanel).apply {
-                    border = BorderFactory.createTitledBorder("pg_stat_statements (opt-in)")
+                add(JBScrollPane(pgStatCardPanel).apply {
+                    border = BorderFactory.createTitledBorder("Historical workload stats (opt-in)")
                     preferredSize = Dimension(400, 100)
                 }, BorderLayout.SOUTH)
             }
@@ -310,7 +322,9 @@ class QueryDuckPanel(private val project: Project) : JPanel(BorderLayout()) {
         val clearButton = JButton("Clear").apply { addActionListener { clearEvents() } }
         val connectButton = JButton("Connect").apply {
             addActionListener {
-                client = QueryDuckEventClient(serverUrlField.text.trim().ifBlank { DEFAULT_SERVER_URL })
+                val url = serverUrlField.text.trim().ifBlank { QueryDuckSettings.DEFAULT_SERVER_URL }
+                QueryDuckSettings.saveServerUrl(url)
+                client = QueryDuckEventClient(url)
                 refresh(silent = false)
             }
         }
@@ -352,56 +366,61 @@ class QueryDuckPanel(private val project: Project) : JPanel(BorderLayout()) {
         }
 
     private fun refresh(silent: Boolean) {
-        Thread {
-            try {
-                val health = client.fetchHealth()
-                val fetched = client.fetchEvents()
-                SwingUtilities.invokeLater {
-                    statusLabel.text = "Connected · ${health.count} event(s) · ${client.baseUrl}"
-                    statusLabel.foreground = Color(0x4EBF82)
-                    sessionWarningsLabel.text = if (health.sessionWarnings.isEmpty()) {
-                        " "
-                    } else {
-                        " Session: ${health.sessionWarnings.joinToString(" | ")}"
-                    }
-                    val previousNewest = newestEventId
-                    events.clear()
-                    events.addAll(fetched.asReversed())
-                    newestEventId = events.firstOrNull()?.eventId
-                    val hasNewEvents = newestEventId != null && newestEventId != previousNewest
-                    applyFilters(
-                        preserveSelection = true,
-                        preferNewest = hasNewEvents && followLive.isSelected,
-                    )
-                    if (!silent && table.rowCount > 0 && table.selectedRow < 0) {
-                        selectEventById(newestEventId)
-                    }
+        var health: HealthResponse? = null
+        var fetched: List<QueryCaptureEventDto>? = null
+        backgroundExecutor.runOnPooledThreadWithResult(
+            task = {
+                health = client.fetchHealth()
+                fetched = client.fetchEvents()
+            },
+            onSuccess = {
+                val resolvedHealth = health ?: return@runOnPooledThreadWithResult
+                val resolvedEvents = fetched ?: return@runOnPooledThreadWithResult
+                statusLabel.text = "Connected · ${resolvedHealth.count} event(s) · ${client.baseUrl}"
+                statusLabel.foreground = Color(0x4EBF82)
+                sessionWarningsLabel.text = if (resolvedHealth.sessionWarnings.isEmpty()) {
+                    " "
+                } else {
+                    " Session: ${resolvedHealth.sessionWarnings.joinToString(" | ")}"
                 }
-            } catch (ex: Exception) {
-                SwingUtilities.invokeLater {
-                    statusLabel.text = "Disconnected · ${ex.message ?: "QueryDuck server not running"}"
-                    statusLabel.foreground = Color(0xE05555)
-                    sessionWarningsLabel.text = " "
-                    if (!silent) {
-                        metaLabel.text = " Start your app with UseQueryDuckDebugging() or UseQueryDuckCapture(o => o.StartLocalEventServer = true)"
-                    }
+                val previousNewest = newestEventId
+                events.clear()
+                events.addAll(resolvedEvents.asReversed())
+                newestEventId = events.firstOrNull()?.eventId
+                val hasNewEvents = newestEventId != null && newestEventId != previousNewest
+                applyFilters(
+                    preserveSelection = true,
+                    preferNewest = hasNewEvents && followLive.isSelected,
+                )
+                if (!silent && table.rowCount > 0 && table.selectedRow < 0) {
+                    selectEventById(newestEventId)
                 }
-            }
-        }.start()
+            },
+            onError = { ex ->
+                statusLabel.text = "Disconnected · ${ex.message ?: "QueryDuck server not running"}"
+                statusLabel.foreground = Color(0xE05555)
+                sessionWarningsLabel.text = " "
+                if (!silent) {
+                    metaLabel.text = " Start your app with UseQueryDuckDebugging() or UseQueryDuckCapture(o => o.StartLocalEventServer = true)"
+                }
+            },
+        )
+    }
+
+    private fun runBackground(task: () -> Unit, onSuccess: () -> Unit, onError: (Exception) -> Unit = {}) {
+        backgroundExecutor.runOnPooledThreadWithResult(task = task, onSuccess = onSuccess, onError = onError)
     }
 
     private fun refreshSchemaAudit() {
-        Thread {
-            try {
-                val presentation = client.fetchSchemaAudit()
-                SwingUtilities.invokeLater { showSchemaAudit(presentation) }
-            } catch (ex: Exception) {
-                SwingUtilities.invokeLater {
-                    schemaRecommendationsList.model = DefaultListModel()
-                    schemaPanel.setText("-- ${ex.message}")
-                }
-            }
-        }.start()
+        var presentation: QueryDuckSchemaAuditPresentationDto? = null
+        runBackground(
+            task = { presentation = client.fetchSchemaAudit() },
+            onSuccess = { presentation?.let { showSchemaAudit(it) } },
+            onError = { ex ->
+                schemaRecommendationsList.model = DefaultListModel()
+                schemaPanel.setText("-- ${ex.message}")
+            },
+        )
     }
 
     private fun showSchemaAudit(presentation: QueryDuckSchemaAuditPresentationDto) {
@@ -494,8 +513,8 @@ class QueryDuckPanel(private val project: Project) : JPanel(BorderLayout()) {
         val feedbackKey = recommendation.feedbackKey ?: return
         val category = recommendation.feedbackCategory ?: return
         val title = recommendation.feedbackTitle ?: return
-        Thread {
-            try {
+        runBackground(
+            task = {
                 client.recordHeuristicFeedback(
                     provider = presentation.provider,
                     sql = feedbackKey,
@@ -503,159 +522,172 @@ class QueryDuckPanel(private val project: Project) : JPanel(BorderLayout()) {
                     title = title,
                     action = action,
                 )
-            } catch (_: Exception) {
-                // Best-effort local learning; ignore when server is offline.
-            }
-        }.start()
+            },
+            onSuccess = { },
+            onError = { },
+        )
     }
 
     private fun setSessionBaseline() {
-        Thread {
-            try {
-                val snapshot = client.setSessionBaseline()
-                SwingUtilities.invokeLater {
-                    sessionPanel.setText("-- Baseline captured at ${snapshot.capturedAt}\neventCount: ${snapshot.eventCount}")
-                }
-            } catch (ex: Exception) {
-                SwingUtilities.invokeLater { sessionPanel.setText("-- ${ex.message}") }
-            }
-        }.start()
+        runBackground(
+            task = { sessionBaselineSnapshot = client.setSessionBaseline() },
+            onSuccess = {
+                val snapshot = sessionBaselineSnapshot ?: return@runBackground
+                sessionPanel.setText("-- Baseline captured at ${snapshot.capturedAt}\neventCount: ${snapshot.eventCount}")
+            },
+            onError = { ex -> sessionPanel.setText("-- ${ex.message}") },
+        )
     }
+
+    private var sessionBaselineSnapshot: QueryDuckSessionSnapshotDto? = null
 
     private fun compareSession() {
-        Thread {
-            try {
-                val comparison = client.compareSession()
-                SwingUtilities.invokeLater {
-                    sessionPanel.setText(
-                        buildString {
-                            appendLine("eventCountDelta: ${comparison.eventCountDelta}")
-                            appendLine("slowQueryCountDelta: ${comparison.slowQueryCountDelta}")
-                            appendLine("failureCountDelta: ${comparison.failureCountDelta}")
-                            appendLine("diagnosticWarningCountDelta: ${comparison.diagnosticWarningCountDelta}")
-                            if (comparison.newSessionWarnings.isNotEmpty()) {
-                                appendLine()
-                                appendLine("new warnings:")
-                                comparison.newSessionWarnings.forEach { appendLine("  - $it") }
-                            }
-                            if (comparison.providerCountDeltas.isNotEmpty()) {
-                                appendLine()
-                                appendLine("provider deltas:")
-                                comparison.providerCountDeltas.forEach { (k, v) -> appendLine("  $k: $v") }
-                            }
-                        },
-                    )
-                }
-            } catch (ex: Exception) {
-                SwingUtilities.invokeLater { sessionPanel.setText("-- ${ex.message}") }
-            }
-        }.start()
+        runBackground(
+            task = { sessionComparisonResult = client.compareSession() },
+            onSuccess = {
+                val comparison = sessionComparisonResult ?: return@runBackground
+                sessionPanel.setText(
+                    buildString {
+                        appendLine("eventCountDelta: ${comparison.eventCountDelta}")
+                        appendLine("slowQueryCountDelta: ${comparison.slowQueryCountDelta}")
+                        appendLine("failureCountDelta: ${comparison.failureCountDelta}")
+                        appendLine("diagnosticWarningCountDelta: ${comparison.diagnosticWarningCountDelta}")
+                        if (comparison.newSessionWarnings.isNotEmpty()) {
+                            appendLine()
+                            appendLine("new warnings:")
+                            comparison.newSessionWarnings.forEach { appendLine("  - $it") }
+                        }
+                        if (comparison.providerCountDeltas.isNotEmpty()) {
+                            appendLine()
+                            appendLine("provider deltas:")
+                            comparison.providerCountDeltas.forEach { (k, v) -> appendLine("  $k: $v") }
+                        }
+                    },
+                )
+            },
+            onError = { ex -> sessionPanel.setText("-- ${ex.message}") },
+        )
     }
+
+    private var sessionComparisonResult: QueryDuckSessionComparisonDto? = null
 
     private fun exportSession() {
-        Thread {
-            try {
-                val json = client.exportSession()
-                SwingUtilities.invokeLater { sessionPanel.setText(json) }
-            } catch (ex: Exception) {
-                SwingUtilities.invokeLater { sessionPanel.setText("-- ${ex.message}") }
-            }
-        }.start()
+        runBackground(
+            task = { exportedSessionJson = client.exportSession() },
+            onSuccess = {
+                sessionPanel.setText(exportedSessionJson.orEmpty())
+                sessionImportField.text = exportedSessionJson.orEmpty()
+            },
+            onError = { ex -> sessionPanel.setText("-- ${ex.message}") },
+        )
     }
+
+    private var exportedSessionJson: String? = null
 
     private fun importSession() {
-        Thread {
-            try {
-                val json = sessionPanel.getText()
-                val imported = client.importSession(json)
-                SwingUtilities.invokeLater {
-                    sessionPanel.setText("-- Imported $imported event(s). Refreshing...")
-                    refresh(silent = false)
-                }
-            } catch (ex: Exception) {
-                SwingUtilities.invokeLater { sessionPanel.setText("-- ${ex.message}") }
-            }
-        }.start()
+        val json = sessionImportField.text.trim()
+        if (json.isBlank()) {
+            sessionPanel.setText("-- Paste exported session JSON into the Import JSON field first.")
+            return
+        }
+
+        runBackground(
+            task = { importedSessionCount = client.importSession(json) },
+            onSuccess = {
+                sessionPanel.setText("-- Imported $importedSessionCount event(s). Refreshing...")
+                refresh(silent = false)
+            },
+            onError = { ex -> sessionPanel.setText("-- ${ex.message}") },
+        )
     }
 
+    private var importedSessionCount: Int = 0
+
     private fun refreshSessionViews() {
-        Thread {
-            try {
-                val hotspots = client.fetchSessionHotspots()
-                val timeline = client.fetchSessionTimeline()
-                val traces = client.fetchSessionTraces()
-                SwingUtilities.invokeLater {
-                    hotspotsPanel.setText(hotspots)
-                    timelinePanel.setText(timeline)
-                    tracesPanel.setText(traces)
-                }
-            } catch (ex: Exception) {
-                SwingUtilities.invokeLater {
-                    hotspotsPanel.setText("-- ${ex.message}")
-                }
-            }
-        }.start()
+        runBackground(
+            task = {
+                sessionHotspots = client.fetchSessionHotspots()
+                sessionTimeline = client.fetchSessionTimeline()
+                sessionTraces = client.fetchSessionTraces()
+            },
+            onSuccess = {
+                sessionHotspots?.let { hotspotsPanel.showData(it) }
+                sessionTimeline?.let { timelinePanel.showEntries(it) }
+                sessionTraces?.let { tracesPanel.showData(it) }
+            },
+            onError = { ex -> hotspotsPanel.showMessage(ex.message ?: "Failed to refresh session views") },
+        )
     }
+
+    private var sessionHotspots: QueryDuckSessionHotspotsDto? = null
+    private var sessionTimeline: List<QueryDuckTimelineEntryDto>? = null
+    private var sessionTraces: QueryDuckTraceGroupingDto? = null
 
     private fun compareSelectedEvents() {
         val left = compareEventId
         val right = selectedEventId
         if (left.isNullOrBlank() || right.isNullOrBlank() || left == right) {
-            diffPanel.setText("-- Select two different events in sequence, then click Compare 2 selected.")
+            diffPanel.showMessage("Select two different events in sequence, then click Compare 2 selected.")
             return
         }
 
-        Thread {
-            try {
-                val diff = client.diffEvents(left, right)
-                SwingUtilities.invokeLater { diffPanel.setText(diff) }
-            } catch (ex: Exception) {
-                SwingUtilities.invokeLater { diffPanel.setText("-- ${ex.message}") }
-            }
-        }.start()
+        runBackground(
+            task = { eventDiffResult = client.diffEvents(left, right) },
+            onSuccess = { eventDiffResult?.let { diffPanel.showDiff(it) } },
+            onError = { ex -> diffPanel.showMessage(ex.message ?: "Diff failed") },
+        )
     }
+
+    private var eventDiffResult: QueryCaptureEventDiffDto? = null
+
+    private fun refreshStatementCache() {
+        runBackground(
+            task = { statementCacheDiagnostics = client.fetchStatementCacheDiagnostics() },
+            onSuccess = { statementCacheDiagnostics?.let { statementCachePanel.showData(it) } },
+            onError = { ex -> statementCachePanel.showMessage(ex.message ?: "Failed to load statement cache diagnostics") },
+        )
+    }
+
+    private var statementCacheDiagnostics: QueryDuckStatementCacheDiagnosticsDto? = null
 
     private fun refreshMemoryStats() {
-        Thread {
-            try {
-                val stats = client.fetchHeuristicMemoryStats()
-                SwingUtilities.invokeLater {
-                    memoryPanel.setText(
-                        buildString {
-                            appendLine("feedbackCount: ${stats.feedbackCount}")
-                            appendLine("distinctShapes: ${stats.distinctShapes}")
-                            appendLine("copiedCount: ${stats.copiedCount}")
-                            appendLine("dismissedCount: ${stats.dismissedCount}")
-                            appendLine("storePath: ${stats.storePath}")
-                        },
-                    )
-                }
-            } catch (ex: Exception) {
-                SwingUtilities.invokeLater { memoryPanel.setText("-- ${ex.message}") }
-            }
-        }.start()
+        runBackground(
+            task = { memoryStats = client.fetchHeuristicMemoryStats() },
+            onSuccess = {
+                val stats = memoryStats ?: return@runBackground
+                memoryPanel.setText(
+                    buildString {
+                        appendLine("feedbackCount: ${stats.feedbackCount}")
+                        appendLine("distinctShapes: ${stats.distinctShapes}")
+                        appendLine("copiedCount: ${stats.copiedCount}")
+                        appendLine("dismissedCount: ${stats.dismissedCount}")
+                        appendLine("storePath: ${stats.storePath}")
+                    },
+                )
+            },
+            onError = { ex -> memoryPanel.setText("-- ${ex.message}") },
+        )
     }
+
+    private var memoryStats: QueryHeuristicMemoryStatsDto? = null
 
     private fun refreshWorkloadStats() {
-        Thread {
-            try {
-                val workload = client.fetchHeuristicWorkload("Sqlite")
-                SwingUtilities.invokeLater { memoryPanel.setText(workload) }
-            } catch (ex: Exception) {
-                SwingUtilities.invokeLater { memoryPanel.setText("-- ${ex.message}") }
-            }
-        }.start()
+        val provider = providerFilter.selectedItem?.toString()?.takeIf { it != "All providers" } ?: "Sqlite"
+        runBackground(
+            task = { workloadStatsJson = client.fetchHeuristicWorkload(provider) },
+            onSuccess = { memoryPanel.setText(workloadStatsJson.orEmpty()) },
+            onError = { ex -> memoryPanel.setText("-- ${ex.message}") },
+        )
     }
 
+    private var workloadStatsJson: String? = null
+
     private fun clearHeuristicMemory() {
-        Thread {
-            try {
-                client.clearHeuristicMemory()
-                refreshMemoryStats()
-            } catch (ex: Exception) {
-                SwingUtilities.invokeLater { memoryPanel.setText("-- ${ex.message}") }
-            }
-        }.start()
+        runBackground(
+            task = { client.clearHeuristicMemory() },
+            onSuccess = { refreshMemoryStats() },
+            onError = { ex -> memoryPanel.setText("-- ${ex.message}") },
+        )
     }
 
     private fun openSourceLocation(event: QueryCaptureEventDto) {
@@ -665,23 +697,20 @@ class QueryDuckPanel(private val project: Project) : JPanel(BorderLayout()) {
     }
 
     private fun clearEvents() {
-        Thread {
-            try {
-                client.clearEvents()
-                SwingUtilities.invokeLater {
-                    events.clear()
-                    newestEventId = null
-                    selectedEventId = null
-                    tableModel.setRows(emptyList())
-                    clearDetails()
-                }
-            } catch (ex: Exception) {
-                SwingUtilities.invokeLater {
-                    statusLabel.text = "Clear failed: ${ex.message}"
-                    statusLabel.foreground = Color(0xE05555)
-                }
-            }
-        }.start()
+        runBackground(
+            task = { client.clearEvents() },
+            onSuccess = {
+                events.clear()
+                newestEventId = null
+                selectedEventId = null
+                tableModel.setRows(emptyList())
+                clearDetails()
+            },
+            onError = { ex ->
+                statusLabel.text = "Clear failed: ${ex.message}"
+                statusLabel.foreground = Color(0xE05555)
+            },
+        )
     }
 
     private fun applyFilters(preserveSelection: Boolean, preferNewest: Boolean = false) {
@@ -762,7 +791,8 @@ class QueryDuckPanel(private val project: Project) : JPanel(BorderLayout()) {
             recommendationsList.model = DefaultListModel()
             suggestedSqlPanel.setText("-- No slow-query analysis for this event.\n-- Analysis runs when duration exceeds SlowQueryThresholdMs.")
             improvementsPanel.setText("-- Plan comparison appears here when a rewrite is recommended.")
-            pgStatPanel.setText("-- Enable EnablePgStatStatementsInsights for PostgreSQL historical stats.")
+            pgStatCardPanel.removeAll()
+            pgStatCardPanel.add(JBLabel("-- Enable EnableHistoricalStatsInsights for workload stats."))
             planGraphPanel.removeAll()
             planGraphPanel.revalidate()
             return
@@ -772,7 +802,8 @@ class QueryDuckPanel(private val project: Project) : JPanel(BorderLayout()) {
             analysis.recommendations.forEach { addElement(it) }
         }
 
-        pgStatPanel.setText(formatHistoricalStats(analysis.historicalStats, analysis.pgStatStatements))
+        pgStatCardPanel.removeAll()
+        renderHistoricalStatsCard(analysis.historicalStats, analysis.pgStatStatements)
 
         if (analysis.recommendations.isNotEmpty()) {
             recommendationsList.selectedIndex = 0
@@ -782,6 +813,49 @@ class QueryDuckPanel(private val project: Project) : JPanel(BorderLayout()) {
             renderPlanGraph(analysis.primaryPlanDiff)
         }
     }
+
+    private fun renderHistoricalStatsCard(
+        historical: QueryHistoricalStatsInsightDto?,
+        pgStat: PgStatStatementInsightDto?,
+    ) {
+        val stats = historical ?: pgStat?.let {
+            QueryHistoricalStatsInsightDto(
+                calls = it.calls,
+                meanExecTimeMs = it.meanExecTimeMs,
+                totalExecTimeMs = it.totalExecTimeMs,
+                rows = it.rows,
+                cacheHitRatio = it.sharedBlocksHitRatio,
+                matchedQueryText = it.matchedQueryText,
+                sourceView = "pg_stat_statements",
+            )
+        }
+
+        if (stats == null) {
+            pgStatCardPanel.add(JBLabel("-- Historical workload stats not included for this event."))
+            return
+        }
+
+        pgStatCardPanel.add(statCardLabel("Calls", stats.calls.toString()))
+        pgStatCardPanel.add(statCardLabel("Mean ms", "%.1f".format(stats.meanExecTimeMs)))
+        pgStatCardPanel.add(statCardLabel("Total ms", "%.0f".format(stats.totalExecTimeMs)))
+        pgStatCardPanel.add(statCardLabel("Rows", stats.rows.toString()))
+        stats.cacheHitRatio?.let {
+            pgStatCardPanel.add(statCardLabel("Cache hit", "${"%.0f".format(it * 100)}%"))
+        }
+        stats.sourceView?.let {
+            pgStatCardPanel.add(statCardLabel("Source", it))
+        }
+        pgStatCardPanel.revalidate()
+        pgStatCardPanel.repaint()
+    }
+
+    private fun statCardLabel(title: String, value: String): JPanel =
+        JPanel().apply {
+            layout = java.awt.GridLayout(2, 1)
+            add(JBLabel(title).apply { foreground = Color(0x8FA2C3) })
+            add(JBLabel(value).apply { foreground = Color(0xDDE4F0) })
+            border = BorderFactory.createEmptyBorder(4, 8, 4, 8)
+        }
 
     private fun formatHistoricalStats(
         historical: QueryHistoricalStatsInsightDto?,
@@ -873,8 +947,8 @@ class QueryDuckPanel(private val project: Project) : JPanel(BorderLayout()) {
     private fun recordHeuristicFeedback(action: String) {
         val event = feedbackEvent ?: findSelectedEvent() ?: return
         val recommendation = feedbackRecommendation ?: recommendationsList.selectedValue ?: return
-        Thread {
-            try {
+        runBackground(
+            task = {
                 client.recordHeuristicFeedback(
                     provider = event.provider,
                     sql = event.sql,
@@ -882,10 +956,10 @@ class QueryDuckPanel(private val project: Project) : JPanel(BorderLayout()) {
                     title = recommendation.title,
                     action = action,
                 )
-            } catch (_: Exception) {
-                // Best-effort local learning; ignore when server is offline.
-            }
-        }.start()
+            },
+            onSuccess = { },
+            onError = { },
+        )
     }
 
     private fun eventPlanDiffFallback(recommendation: SlowQueryRecommendationDto): String =
@@ -935,7 +1009,8 @@ class QueryDuckPanel(private val project: Project) : JPanel(BorderLayout()) {
         planPanel.setText("")
         suggestedSqlPanel.setText("")
         improvementsPanel.setText("")
-        pgStatPanel.setText("")
+        pgStatCardPanel.removeAll()
+        pgStatCardPanel.revalidate()
         planGraphPanel.removeAll()
         planGraphPanel.revalidate()
         recommendationsList.model = DefaultListModel()
@@ -1016,11 +1091,31 @@ class QueryDuckPanel(private val project: Project) : JPanel(BorderLayout()) {
         ): Component {
             val component = super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus)
             if (value is SlowQueryRecommendationDto) {
+                val icon = categoryIcon(value.category)
                 val hint = value.heuristicHint?.let { " — $it" }.orEmpty()
-                text = "[${value.category}] ${value.title}$hint"
+                val selectedBadge = if (isSelected) " SELECTED" else ""
+                text = "$icon [${value.category}] ${value.title}$hint$selectedBadge"
+                if (!isSelected) {
+                    foreground = when (value.category) {
+                        "IndexCreation" -> Color(0x4EBF82)
+                        "ManualRewrite" -> Color(0x6CB6FF)
+                        "UseCte" -> Color(0xE8A035)
+                        else -> Color(0xDDE4F0)
+                    }
+                }
             }
             return component
         }
+
+        private fun categoryIcon(category: String): String =
+            when (category) {
+                "IndexCreation" -> "IDX"
+                "ManualRewrite" -> "REW"
+                "UseCte" -> "CTE"
+                "SchemaSeparation" -> "SCH"
+                "ApplicationChange" -> "APP"
+                else -> "TIP"
+            }
     }
 
     private class DiagnosticRenderer : DefaultListCellRenderer() {
@@ -1049,7 +1144,7 @@ class QueryDuckPanel(private val project: Project) : JPanel(BorderLayout()) {
         }
     }
 
-    companion object {
-        private const val DEFAULT_SERVER_URL = "http://127.0.0.1:17654"
+    override fun dispose() {
+        refreshTimer.stop()
     }
 }

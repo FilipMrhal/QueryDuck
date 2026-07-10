@@ -142,22 +142,10 @@ class QueryDuckEventClient(
         return (map["imported"] as? Number)?.toInt() ?: 0
     }
 
-    fun fetchSessionHotspots(): String {
-        val request = HttpRequest.newBuilder()
-            .uri(URI.create("$baseUrl/queryduck/session/hotspots"))
-            .timeout(Duration.ofSeconds(3))
-            .GET()
-            .build()
+    fun fetchSessionHotspots(): QueryDuckSessionHotspotsDto =
+        fetchTyped("$baseUrl/queryduck/session/hotspots", QueryDuckSessionHotspotsDto::class.java)
 
-        val response = http.send(request, HttpResponse.BodyHandlers.ofString())
-        if (response.statusCode() != 200) {
-            throw QueryDuckClientException("HTTP ${response.statusCode()}")
-        }
-
-        return response.body()
-    }
-
-    fun fetchSessionTimeline(): String {
+    fun fetchSessionTimeline(): List<QueryDuckTimelineEntryDto> {
         val request = HttpRequest.newBuilder()
             .uri(URI.create("$baseUrl/queryduck/session/timeline"))
             .timeout(Duration.ofSeconds(3))
@@ -169,25 +157,14 @@ class QueryDuckEventClient(
             throw QueryDuckClientException("HTTP ${response.statusCode()}")
         }
 
-        return response.body()
+        val type = object : TypeToken<List<QueryDuckTimelineEntryDto>>() {}.type
+        return gson.fromJson(response.body(), type) ?: emptyList()
     }
 
-    fun fetchSessionTraces(): String {
-        val request = HttpRequest.newBuilder()
-            .uri(URI.create("$baseUrl/queryduck/session/traces"))
-            .timeout(Duration.ofSeconds(3))
-            .GET()
-            .build()
+    fun fetchSessionTraces(): QueryDuckTraceGroupingDto =
+        fetchTyped("$baseUrl/queryduck/session/traces", QueryDuckTraceGroupingDto::class.java)
 
-        val response = http.send(request, HttpResponse.BodyHandlers.ofString())
-        if (response.statusCode() != 200) {
-            throw QueryDuckClientException("HTTP ${response.statusCode()}")
-        }
-
-        return response.body()
-    }
-
-    fun diffEvents(leftEventId: String, rightEventId: String): String {
+    fun diffEvents(leftEventId: String, rightEventId: String): QueryCaptureEventDiffDto {
         val payload = gson.toJson(mapOf("leftEventId" to leftEventId, "rightEventId" to rightEventId))
         val request = HttpRequest.newBuilder()
             .uri(URI.create("$baseUrl/queryduck/events/diff"))
@@ -201,7 +178,25 @@ class QueryDuckEventClient(
             throw QueryDuckClientException("Diff failed: HTTP ${response.statusCode()}")
         }
 
-        return response.body()
+        return gson.fromJson(response.body(), QueryCaptureEventDiffDto::class.java)
+    }
+
+    fun fetchStatementCacheDiagnostics(): QueryDuckStatementCacheDiagnosticsDto =
+        fetchTyped("$baseUrl/queryduck/diagnostics/statement-cache", QueryDuckStatementCacheDiagnosticsDto::class.java)
+
+    private fun <T> fetchTyped(url: String, clazz: Class<T>): T {
+        val request = HttpRequest.newBuilder()
+            .uri(URI.create(url))
+            .timeout(Duration.ofSeconds(3))
+            .GET()
+            .build()
+
+        val response = http.send(request, HttpResponse.BodyHandlers.ofString())
+        if (response.statusCode() != 200) {
+            throw QueryDuckClientException("HTTP ${response.statusCode()}")
+        }
+
+        return gson.fromJson(response.body(), clazz)
     }
 
     fun clearHeuristicMemory() {

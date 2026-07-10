@@ -137,10 +137,19 @@ private class PlanStepGraphPanel(
 
             if (index < steps.size - 1 && index < 5) {
                 val arrowX = 12 + boxWidth / 2
+                val arrowBottom = y + boxHeight
                 g2.color = Color(0x6C7A96)
-                g2.drawLine(arrowX, y + boxHeight, arrowX, y + boxHeight + 12)
-                g2.drawLine(arrowX - 4, y + boxHeight + 8, arrowX, y + boxHeight + 12)
-                g2.drawLine(arrowX + 4, y + boxHeight + 8, arrowX, y + boxHeight + 12)
+                g2.drawLine(arrowX, arrowBottom, arrowX, arrowBottom + 10)
+                g2.fillPolygon(
+                    intArrayOf(arrowX - 5, arrowX + 5, arrowX),
+                    intArrayOf(arrowBottom + 6, arrowBottom + 6, arrowBottom + 12),
+                    3,
+                )
+                if (index < steps.size - 1) {
+                    val nextOperation = steps[index + 1].operation.take(18)
+                    g2.font = font.deriveFont(Font.PLAIN, 10f)
+                    g2.drawString("-> $nextOperation", arrowX + 10, arrowBottom + 10)
+                }
             }
 
             y += boxHeight + 16

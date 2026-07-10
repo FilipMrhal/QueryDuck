@@ -31,6 +31,7 @@ public sealed class SqlServerDatabaseAdapter : IDatabaseAdapter
 
         await using var command = connection.CreateCommand();
         command.CommandText = sql;
+        ExplainCommandHelper.BindParameters(command, parameters);
         var planText = command.ExecuteExplainPlanXml();
         return await Task.FromResult(new ExecutionPlanResult(planText, SchemaAuditHelper.ComputePlanHash(planText)))
             .ConfigureAwait(false);

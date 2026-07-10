@@ -23,11 +23,8 @@ internal sealed class DynamicOrderByRule : QueryRuleBase
 
         protected override Expression VisitMethodCall(MethodCallExpression node)
         {
-            if (node.Method.DeclaringType == typeof(Queryable) &&
-                node.Method.Name is "OrderBy" or "OrderByDescending" &&
-                node.Arguments.Count >= 3 &&
-                node.Arguments[2] is UnaryExpression { Operand: LambdaExpression lambda } &&
-                UsesRuntimeKey(lambda.Body))
+            if (TryGetOrderByLambda(node) is { Body: var keySelector } &&
+                UsesRuntimeKey(keySelector))
             {
                 _diagnostics.Add(new QueryDiagnostic(
                     "QD018",
@@ -37,6 +34,25 @@ internal sealed class DynamicOrderByRule : QueryRuleBase
             }
 
             return base.VisitMethodCall(node);
+        }
+
+        private static LambdaExpression? TryGetOrderByLambda(MethodCallExpression node)
+        {
+            if (node.Method.DeclaringType != typeof(Queryable) ||
+                node.Method.Name is not ("OrderBy" or "OrderByDescending"))
+            {
+                return null;
+            }
+
+            foreach (var argument in node.Arguments)
+            {
+                if (argument is UnaryExpression { Operand: LambdaExpression lambda })
+                {
+                    return lambda;
+                }
+            }
+
+            return null;
         }
 
         private static bool UsesRuntimeKey(Expression body) =>

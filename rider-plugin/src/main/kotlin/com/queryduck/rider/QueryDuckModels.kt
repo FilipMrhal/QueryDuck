@@ -211,3 +211,74 @@ data class QueryDuckSchemaAuditPresentationDto(
     val hiddenFindingCount: Int = 0,
     val sessionTables: List<SessionTableRelevanceDto> = emptyList(),
 )
+
+data class QueryShapeHotspotDto(
+    val shapeKey: String = "",
+    val normalizedSqlPreview: String = "",
+    val executionCount: Int = 0,
+    val totalDurationMs: Double = 0.0,
+    val maxDurationMs: Double = 0.0,
+    val averageDurationMs: Double = 0.0,
+    val providers: List<String> = emptyList(),
+    val tags: List<String> = emptyList(),
+)
+
+data class QueryDuckSessionHotspotsDto(
+    val totalEvents: Int = 0,
+    val distinctShapes: Int = 0,
+    val hotspots: List<QueryShapeHotspotDto> = emptyList(),
+)
+
+data class QueryDuckTimelineEntryDto(
+    val timestamp: String = "",
+    val kind: String = "",
+    val label: String = "",
+    val durationMs: Double? = null,
+    val eventId: String? = null,
+    val traceId: String? = null,
+    val correlationId: String? = null,
+    val requestPath: String? = null,
+)
+
+data class QueryDuckTraceGroupDto(
+    val traceKey: String = "",
+    val traceId: String? = null,
+    val correlationId: String? = null,
+    val requestPath: String? = null,
+    val eventCount: Int = 0,
+    val slowQueryCount: Int = 0,
+    val failureCount: Int = 0,
+    val totalDurationMs: Double = 0.0,
+    val eventIds: List<String> = emptyList(),
+)
+
+data class QueryDuckTraceGroupingDto(
+    val totalEvents: Int = 0,
+    val groupCount: Int = 0,
+    val groups: List<QueryDuckTraceGroupDto> = emptyList(),
+)
+
+data class QueryCaptureEventDiffDto(
+    val left: QueryCaptureEventDto = QueryCaptureEventDto(),
+    val right: QueryCaptureEventDto = QueryCaptureEventDto(),
+    val sqlChanged: Boolean = false,
+    val parametersChanged: Boolean = false,
+    val planChanged: Boolean = false,
+    val diagnosticsChanged: Boolean = false,
+    val durationChanged: Boolean = false,
+    val sqlDiff: String = "",
+    val parametersDiff: String = "",
+    val diagnosticsDiff: String = "",
+)
+
+data class StatementCacheFindingDto(
+    val signature: String = "",
+    val variantCount: Int = 0,
+    val message: String = "",
+)
+
+data class QueryDuckStatementCacheDiagnosticsDto(
+    val provider: String = "",
+    val connectionAvailable: Boolean = false,
+    val findings: List<StatementCacheFindingDto> = emptyList(),
+)

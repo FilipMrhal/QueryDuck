@@ -146,6 +146,12 @@ public sealed class QueryCapturePipeline
         IDatabaseAdapter? adapter = null;
         DbConnection? connection = null;
 
+        if (context?.Database.GetDbConnection() is { } runtimeConnection)
+        {
+            QueryDuckCaptureRuntime.LastConnection = runtimeConnection;
+            QueryDuckCaptureRuntime.LastProviderName = context.Database.ProviderName;
+        }
+
         if (shouldCapturePlan &&
             _adapters?.Resolve(provider) is { } resolvedAdapter &&
             context?.Database.GetDbConnection() is { } dbConnection)
@@ -220,6 +226,7 @@ public sealed class QueryCapturePipeline
                         tableStatistics = await LoadTableStatisticsAsync(
                             adapter,
                             connection,
+                            provider,
                             sql,
                             cancellationToken).ConfigureAwait(false);
                     }
@@ -322,25 +329,31 @@ public sealed class QueryCapturePipeline
     private static async Task<Dictionary<string, IReadOnlyList<ColumnStatistics>>> LoadTableStatisticsAsync(
         IDatabaseAdapter adapter,
         DbConnection connection,
+        DatabaseProvider provider,
         string sql,
         CancellationToken cancellationToken)
     {
         var patterns = SqlPatternAnalyzer.Analyze(sql);
         var tables = patterns.ReferencedTables
-            .Select(NormalizeTableName)
             .Where(t => !string.IsNullOrWhiteSpace(t))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .Take(4)
             .ToArray();
 
         var statistics = new Dictionary<string, IReadOnlyList<ColumnStatistics>>(StringComparer.OrdinalIgnoreCase);
-        foreach (var table in tables)
+        foreach (var tableReference in tables)
         {
-            var columns = await adapter.GetColumnStatisticsAsync(connection, "public", table, cancellationToken)
+            var (schema, table) = ProviderSchemaHelper.ResolveTableReference(tableReference, provider);
+            if (provider == DatabaseProvider.MySql && string.IsNullOrWhiteSpace(schema))
+            {
+                schema = connection.Database;
+            }
+
+            var columns = await adapter.GetColumnStatisticsAsync(connection, schema, table, cancellationToken)
                 .ConfigureAwait(false);
             if (columns.Count > 0)
             {
-                statistics[table] = columns;
+                statistics[tableReference] = columns;
             }
         }
 

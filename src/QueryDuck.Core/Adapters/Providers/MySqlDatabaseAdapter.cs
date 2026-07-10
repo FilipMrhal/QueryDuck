@@ -29,8 +29,7 @@ public sealed class MySqlDatabaseAdapter : IDatabaseAdapter
         ArgumentNullException.ThrowIfNull(connection);
         ArgumentNullException.ThrowIfNull(sql);
 
-        await using var command = connection.CreateCommand();
-        command.CommandText = $"EXPLAIN FORMAT=JSON {sql}";
+        await using var command = ExplainCommandHelper.CreateCommand(connection, $"EXPLAIN FORMAT=JSON {sql}", parameters);
         var planText = string.Empty;
         await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
         while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))

@@ -171,6 +171,17 @@ public sealed class QueryDuckEventServer : IAsyncDisposable
                 return;
             }
 
+            if (path.Equals("/queryduck/diagnostics/statement-cache", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(context.Request.HttpMethod, "GET", StringComparison.OrdinalIgnoreCase))
+            {
+                var diagnostics = await QueryDuckStatementCacheDiagnosticsBuilder.BuildAsync(
+                    QueryDuckCaptureRuntime.Adapters,
+                    QueryDuckCaptureRuntime.LastConnection,
+                    QueryDuckCaptureRuntime.LastProviderName).ConfigureAwait(false);
+                await WriteJsonAsync(context, diagnostics).ConfigureAwait(false);
+                return;
+            }
+
             if (path.Equals("/queryduck/session/baseline", StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(context.Request.HttpMethod, "POST", StringComparison.OrdinalIgnoreCase))
             {

@@ -281,6 +281,22 @@ public sealed class EventServerTests : IAsyncLifetime
         }
     }
 
+    [Fact]
+    public async Task StatementCache_ReturnsUnavailableWithoutConnection()
+    {
+        StartServer();
+        QueryDuckCaptureRuntime.LastConnection = null;
+        QueryDuckCaptureRuntime.LastProviderName = null;
+
+        using var client = new HttpClient();
+        var response = await client.GetFromJsonAsync<StatementCacheResponse>(
+            new Uri(Prefix, "queryduck/diagnostics/statement-cache"));
+
+        Assert.NotNull(response);
+        Assert.False(response.ConnectionAvailable);
+        Assert.Empty(response.Findings);
+    }
+
     private static void StartServer()
     {
         QueryDuckOptionsBuilderExtensions.EnsureEventServer(new QueryCaptureOptions
@@ -297,6 +313,16 @@ public sealed class EventServerTests : IAsyncLifetime
         Sql = $"SELECT {marker}",
         Provider = "Oracle",
     };
+
+    private sealed record StatementCacheResponse(
+        string Provider,
+        bool ConnectionAvailable,
+        IReadOnlyList<StatementCacheFindingResponse> Findings);
+
+    private sealed record StatementCacheFindingResponse(
+        string Signature,
+        int VariantCount,
+        string Message);
 
     private sealed record HealthResponse(string Status, int Count);
 

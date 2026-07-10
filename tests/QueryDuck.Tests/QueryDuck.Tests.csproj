@@ -3,7 +3,7 @@
   <PropertyGroup>
     <IsTestProject>true</IsTestProject>
     <IsPackable>false</IsPackable>
-    <NoWarn>$(NoWarn);CA1515;CA1707;CA1861;CA2000;CA1711;CA1849</NoWarn>
+    <NoWarn>$(NoWarn);CA1515;CA1707;CA1861;CA2000;CA1711;CA1849;CA1001</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
@@ -17,7 +17,10 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
     <!-- Direct reference overrides the vulnerable 2.1.11 native SQLite pulled transitively (GHSA-2m69-gcr7-jv3q). -->
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
+    <PackageReference Include="Microsoft.Data.Sqlite" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="Testcontainers.PostgreSql" />
     <PackageReference Include="Serilog" />
   </ItemGroup>
 
@@ -29,6 +32,7 @@
     <ProjectReference Include="..\..\src\QueryDuck.Analyzers\QueryDuck.Analyzers.csproj"
                       OutputItemType="Analyzer"
                       ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\src\QueryDuck.Analyzers\QueryDuck.Analyzers.csproj" />
     <ProjectReference Include="..\..\src\QueryDuck.Testing\QueryDuck.Testing.csproj" />
     <ProjectReference Include="..\..\samples\QueryDuck.Sample\QueryDuck.Sample.csproj" />
   </ItemGroup>

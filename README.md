@@ -73,7 +73,7 @@ Leave it running, then open the QueryDuck tool window in your IDE.
 
 ## Installation
 
-### NuGet packages (v1.4.0)
+### NuGet packages (v1.5.0)
 
 | Package | When to install |
 |---------|-----------------|
@@ -82,7 +82,7 @@ Leave it running, then open the QueryDuck tool window in your IDE.
 | **`QueryDuck.OpenTelemetry`** | Optional — export capture events as OpenTelemetry `Activity` spans |
 | **`QueryDuck.EntityFrameworkExtensions`** | Optional — capture Z.EntityFramework.Extensions bulk/batch SQL |
 
-Most apps only need **`QueryDuck.Core`**. Provider adapters (Oracle, PostgreSQL, SQL Server, MySQL) are built in and use pure ADO.NET — no extra provider packages required.
+Provider adapters (Oracle, PostgreSQL, SQL Server, MySQL, SQLite) are built into **QueryDuck.Core** — use `DatabaseAdapterRegistry.CreateWithAllProviders()` from `QueryDuck.Core.Adapters`.
 
 ```bash
 dotnet add package QueryDuck.Core
@@ -214,16 +214,8 @@ Register adapters when you need EXPLAIN plans, schema audit, or PostgreSQL insig
 
 ```csharp
 using QueryDuck.Core.Adapters;
-using QueryDuck.Oracle;
-using QueryDuck.PostgreSql;
-using QueryDuck.SqlServer;
-using QueryDuck.MySql;
-using QueryDuck.Sqlite;
 
 var adapters = DatabaseAdapterRegistry.CreateWithAllProviders();
-// Includes Oracle, PostgreSQL, SQL Server, MySQL, and SQLite
-// or pick individually:
-// var adapters = new DatabaseAdapterRegistry().AddPostgreSql().AddSqlServer();
 ```
 
 ---
@@ -255,6 +247,7 @@ var adapters = DatabaseAdapterRegistry.CreateWithAllProviders();
 | **Timeline** | Query + SaveChanges timeline for the session |
 | **Traces** | Events grouped by `traceId`, `correlationId`, or `requestPath` |
 | **Diff** | Side-by-side diff of two selected events (SQL, parameters, diagnostics) |
+| **Cache** | Statement-cache / plan-cache diagnostics from the active provider |
 | **Memory** | Heuristic memory stats, workload ledger, clear learned data |
 
 ![QueryDuck Rider plugin — Improvements tab](assets/mockups/queryduck-rider-improvements.png)
@@ -266,7 +259,7 @@ Session warnings (N+1, slow queries) appear in an amber banner above the split p
 ```bash
 cd rider-plugin
 gradle buildPlugin
-# Output: rider-plugin/build/distributions/querylens-rider-plugin-1.4.0.zip
+# Output: rider-plugin/build/distributions/queryduck-rider-plugin-1.5.0.zip
 ```
 
 Install via Rider → Settings → Plugins → ⚙ → Install Plugin from Disk.
@@ -597,6 +590,7 @@ Default base URL: **`http://127.0.0.1:17654`**
 | `/queryduck/session/timeline` | GET | Query + SaveChanges timeline |
 | `/queryduck/session/traces` | GET | Events grouped by trace/correlation/request path |
 | `/queryduck/events/diff` | POST | Diff two events by `leftEventId` / `rightEventId` |
+| `/queryduck/diagnostics/statement-cache` | GET | Statement-cache / plan-cache diagnostics for the active provider |
 | `/queryduck/memory/feedback` | POST | Record recommendation feedback (`Viewed`, `Selected`, `Copied`, `Dismissed`) |
 | `/queryduck/memory/stats` | GET | Local heuristic memory statistics |
 | `/queryduck/memory/workload` | GET | Local workload ledger (`?provider=Sqlite`) |
@@ -671,11 +665,11 @@ dotnet test QueryDuck.slnx --settings coverlet.runsettings
 
 | Artifact | Contents |
 |----------|----------|
-| `nuget-packages` | `QueryDuck.Core`, `QueryDuck.Serilog`, `QueryDuck.EntityFrameworkExtensions` + symbol packages |
+| `nuget-packages` | `QueryDuck.Core`, `QueryDuck.Serilog`, `QueryDuck.EntityFrameworkExtensions`, `QueryDuck.OpenTelemetry` + symbol packages |
 | `queryduck-rider-plugin` | Rider plugin `.zip` |
 | `coverage` | Cobertura coverage + test results |
 
-Tag a release as `v1.4.0` to create a GitHub Release with all artifacts. Set the `NUGET_API_KEY` secret to publish to NuGet.org.
+Tag a release as `v1.5.0` to create a GitHub Release with all artifacts. Set the `NUGET_API_KEY` secret to publish to NuGet.org.
 
 See [docs/CODE_QUALITY.md](docs/CODE_QUALITY.md) for coverage gates (85% line coverage).
 

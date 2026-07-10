@@ -9,7 +9,7 @@ public sealed class QueryDuckSaveChangesInterceptor : SaveChangesInterceptor
 
     public override InterceptionResult<int> SavingChanges(DbContextEventData eventData, InterceptionResult<int> result)
     {
-        TrackSaveChanges();
+        TrackSaveChanges(eventData);
         return base.SavingChanges(eventData, result);
     }
 
@@ -18,18 +18,20 @@ public sealed class QueryDuckSaveChangesInterceptor : SaveChangesInterceptor
         InterceptionResult<int> result,
         CancellationToken cancellationToken = default)
     {
-        TrackSaveChanges();
+        TrackSaveChanges(eventData);
         return base.SavingChangesAsync(eventData, result, cancellationToken);
     }
 
-    private void TrackSaveChanges()
+    private void TrackSaveChanges(DbContextEventData eventData)
     {
+        ArgumentNullException.ThrowIfNull(eventData);
         _saveChangesCount++;
         QueryDuckTransactionTimeline.RecordSaveChanges(_saveChangesCount);
         if (_saveChangesCount > 1)
         {
             QueryDuckSession.AddWarning(
                 $"Repeated SaveChanges detected ({_saveChangesCount} calls this session) — consider batching updates or a single unit-of-work commit.");
+            QueryDuckSaveChangesCapture.Record(eventData.Context, _saveChangesCount);
         }
     }
 }

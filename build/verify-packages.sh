@@ -7,6 +7,7 @@ EXPECTED=(
   QueryDuck.Core
   QueryDuck.EntityFrameworkExtensions
   QueryDuck.Serilog
+  QueryDuck.OpenTelemetry
 )
 
 shopt -s nullglob
